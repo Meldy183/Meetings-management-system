@@ -1,0 +1,300 @@
+openapi: 3.0.3
+
+info:
+  title: Meeting Bot API
+  description: >
+    REST API for the Meetings Editor Telegram Mini App.
+    Provides participant lookup, meeting creation, and .docx export.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: participants
+    description: Participant management
+  - name: meetings
+    description: Meeting management and export
+
+paths:
+  /participants:
+    get:
+      tags:
+        - participants
+      summary: Search participant by full name
+      description: >
+        Searches the database for a participant matching the provided name parts.
+        The frontend uses this endpoint to verify a person exists before adding
+        them to a meeting. Returns the first matching participant or 404.
+      parameters:
+        - name: last_name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: Иванов
+        - name: first_name
+          in: query
+          required: true
+          schema:
+            type: string
+          example: Иван
+        - name: middle_name
+          in: query
+          required: false
+          schema:
+            type: string
+          example: Иванович
+      responses:
+        '200':
+          description: Participant found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+              example:
+                id: 42
+                last_name: Иванов
+                first_name: Иван
+                middle_name: Иванович
+                info: Руководитель отдела
+        '404':
+          description: Participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+  /meetings:
+    post:
+      tags:
+        - meetings
+      summary: Create a meeting
+      description: >
+        Creates a new meeting record in one step ("Зафиксировать").
+        The frontend sends the accumulated data: title, agenda items, and
+        the IDs of participants already validated via GET /participants.
+        If any participant_id does not exist in the database, the server
+        returns 422 Unprocessable Entity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeetingCreate'
+            example:
+              title: Еженедельная планёрка
+              agenda_items:
+                - Подведение итогов прошлой недели
+                - Планирование на следующую неделю
+              participant_ids:
+                - 42
+                - 17
+      responses:
+        '201':
+          description: Meeting created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                title: Еженедельная планёрка
+                agenda_items:
+                  - Подведение итогов прошлой недели
+                  - Планирование на следующую неделю
+                participants:
+                  - id: 42
+                    last_name: Иванов
+                    first_name: Иван
+                    middle_name: Иванович
+                    info: Руководитель отдела
+                  - id: 17
+                    last_name: Петрова
+                    first_name: Мария
+                    middle_name: Сергеевна
+                    info: Ведущий инженер
+                created_at: '2026-02-22T10:00:00Z'
+        '422':
+          description: >
+            Validation error — one or more participant_ids do not exist
+            in the database.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: One or more participants not found
+                details:
+                  invalid_participant_ids:
+                    - 99
+                    - 100
+
+  /meetings/{id}/export:
+    get:
+      tags:
+        - meetings
+      summary: Export meeting as DOCX
+      description: >
+        Generates and returns a .docx file for the specified meeting.
+        The document is built from a server-side template where tags
+        such as {title}, {date}, {participants}, {agenda_items} are
+        replaced with the meeting's actual data.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting to export
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: DOCX file
+          headers:
+            Content-Disposition:
+              description: 'Attachment filename, e.g. attachment; filename="meeting-3fa85f64.docx"'
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+components:
+  schemas:
+
+    Participant:
+      type: object
+      description: A person who can be added to a meeting.
+      required:
+        - id
+        - last_name
+        - first_name
+      properties:
+        id:
+          type: integer
+          description: Unique participant identifier
+          example: 42
+        last_name:
+          type: string
+          description: Last name (фамилия)
+          example: Иванов
+        first_name:
+          type: string
+          description: First name (имя)
+          example: Иван
+        middle_name:
+          type: string
+          description: Middle name / patronymic (отчество), optional
+          example: Иванович
+        info:
+          type: string
+          description: Additional info (job title, department, etc.)
+          example: Руководитель отдела
+
+    MeetingCreate:
+      type: object
+      description: Payload for creating a new meeting.
+      required:
+        - title
+        - agenda_items
+        - participant_ids
+      properties:
+        title:
+          type: string
+          description: Meeting title / topic
+          example: Еженедельная планёрка
+        agenda_items:
+          type: array
+          description: List of agenda points for the meeting
+          minItems: 1
+          items:
+            type: string
+          example:
+            - Подведение итогов прошлой недели
+            - Планирование на следующую неделю
+        participant_ids:
+          type: array
+          description: >
+            IDs of participants to include. Each ID must exist in the
+            database — validated via GET /participants before submission.
+          minItems: 1
+          items:
+            type: integer
+          example:
+            - 42
+            - 17
+
+    Meeting:
+      type: object
+      description: A fully created meeting record returned by the server.
+      required:
+        - id
+        - title
+        - agenda_items
+        - participants
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique meeting identifier (UUID)
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        title:
+          type: string
+          description: Meeting title
+          example: Еженедельная планёрка
+        agenda_items:
+          type: array
+          description: List of agenda points
+          items:
+            type: string
+          example:
+            - Подведение итогов прошлой недели
+            - Планирование на следующую неделю
+        participants:
+          type: array
+          description: Full participant objects resolved from the submitted IDs
+          items:
+            $ref: '#/components/schemas/Participant'
+        created_at:
+          type: string
+          format: date-time
+          description: Timestamp of creation (UTC, ISO 8601)
+          example: '2026-02-22T10:00:00Z'
+
+    ErrorNotFound:
+      type: object
+      description: Resource not found error response.
+      properties:
+        message:
+          type: string
+          example: Not found
+
+    Error422:
+      type: object
+      description: Unprocessable entity error — semantic validation failed.
+      properties:
+        message:
+          type: string
+          description: Human-readable error summary
+          example: One or more participants not found
+        details:
+          type: object
+          description: Optional structured details about what failed
+          additionalProperties: true
+          example:
+            invalid_participant_ids:
+              - 99
+              - 100
+
