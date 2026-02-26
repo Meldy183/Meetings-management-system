@@ -66,6 +66,49 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
+    post:
+      tags:
+        - participants
+      summary: Create a new participant
+      description: >
+        Adds a new participant to the database.
+        Returns 409 Conflict if a participant with the same last_name,
+        first_name, and middle_name already exists.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParticipantCreate'
+            example:
+              last_name: Сидоров
+              first_name: Алексей
+              middle_name: Петрович
+              info: Главный аналитик
+      responses:
+        '201':
+          description: Participant created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+              example:
+                id: 99
+                last_name: Сидоров
+                first_name: Алексей
+                middle_name: Петрович
+                info: Главный аналитик
+        '409':
+          description: Participant with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: Participant already exists
+                details:
+                  existing_id: 55
+
   /meetings:
     post:
       tags:
@@ -73,10 +116,10 @@ paths:
       summary: Create a meeting
       description: >
         Creates a new meeting record in one step ("Зафиксировать").
-        The frontend sends the accumulated data: title, agenda items, and
-        the IDs of participants already validated via GET /participants.
-        If any participant_id does not exist in the database, the server
-        returns 422 Unprocessable Entity.
+        The frontend sends the accumulated data: title, date, chairperson,
+        agenda items with speakers, and the IDs of all participants.
+        If any participant_id, speaker_id, or chairperson_id does not exist
+        in the database, the server returns 422 Unprocessable Entity.
       requestBody:
         required: true
         content:
@@ -84,10 +127,14 @@ paths:
             schema:
               $ref: '#/components/schemas/MeetingCreate'
             example:
-              title: Еженедельная планёрка
+              title: совещания по вопросам поддержки применения ИИ в науке
+              date: '2026-02-26T11:00:00Z'
+              chairperson_id: 42
               agenda_items:
-                - Подведение итогов прошлой недели
-                - Планирование на следующую неделю
+                - text: Вступительное слово
+                  speaker_id: 42
+                - text: Об институте AIRI и видении применения ИИ в науке
+                  speaker_id: 17
               participant_ids:
                 - 42
                 - 17
@@ -100,26 +147,45 @@ paths:
                 $ref: '#/components/schemas/Meeting'
               example:
                 id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-                title: Еженедельная планёрка
+                title: совещания по вопросам поддержки применения ИИ в науке
+                date: '2026-02-26T11:00:00Z'
+                chairperson:
+                  id: 42
+                  last_name: Иванов
+                  first_name: Иван
+                  middle_name: Иванович
+                  info: Заместитель руководителя Секретариата
                 agenda_items:
-                  - Подведение итогов прошлой недели
-                  - Планирование на следующую неделю
+                  - text: Вступительное слово
+                    speaker:
+                      id: 42
+                      last_name: Иванов
+                      first_name: Иван
+                      middle_name: Иванович
+                      info: Заместитель руководителя Секретариата
+                  - text: Об институте AIRI и видении применения ИИ в науке
+                    speaker:
+                      id: 17
+                      last_name: Петрова
+                      first_name: Мария
+                      middle_name: Сергеевна
+                      info: Ведущий инженер
                 participants:
                   - id: 42
                     last_name: Иванов
                     first_name: Иван
                     middle_name: Иванович
-                    info: Руководитель отдела
+                    info: Заместитель руководителя Секретариата
                   - id: 17
                     last_name: Петрова
                     first_name: Мария
                     middle_name: Сергеевна
                     info: Ведущий инженер
-                created_at: '2026-02-22T10:00:00Z'
+                created_at: '2026-02-26T10:00:00Z'
         '422':
           description: >
-            Validation error — one or more participant_ids do not exist
-            in the database.
+            Validation error — one or more participant_ids, speaker_ids,
+            or chairperson_id do not exist in the database.
           content:
             application/json:
               schema:
@@ -131,16 +197,20 @@ paths:
                     - 99
                     - 100
 
-  /meetings/{id}/export:
+  /meetings/{id}/export/agenda:
     get:
       tags:
         - meetings
-      summary: Export meeting as DOCX
+      summary: Export meeting agenda as DOCX (Повестка)
       description: >
-        Generates and returns a .docx file for the specified meeting.
-        The document is built from a server-side template where tags
-        such as {title}, {date}, {participants}, {agenda_items} are
-        replaced with the meeting's actual data.
+        Generates and returns a .docx "Повестка" document for the specified
+        meeting. The document mirrors the official template layout:
+        - Header block: "ПОВЕСТКА / [title]" centred, followed by the
+          chairperson line and meeting date/time aligned right
+        - Numbered agenda items (roman numerals I, II, III…), each followed
+          by a "Докладчик:" label and a two-column table row containing the
+          speaker's LAST NAME / First Name Patronymic in the left cell and
+          their info/role in the right cell
       parameters:
         - name: id
           in: path
@@ -152,10 +222,56 @@ paths:
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
       responses:
         '200':
-          description: DOCX file
+          description: DOCX agenda file
           headers:
             Content-Disposition:
-              description: 'Attachment filename, e.g. attachment; filename="meeting-3fa85f64.docx"'
+              description: >
+                Attachment filename, e.g.
+                attachment; filename="agenda-3fa85f64.docx"
+              schema:
+                type: string
+          content:
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+  /meetings/{id}/export/participants:
+    get:
+      tags:
+        - meetings
+      summary: Export participant list as DOCX (Список участников)
+      description: >
+        Generates and returns a .docx "Список участников" document for the
+        specified meeting. The document mirrors the official template layout:
+        - Header block: "СПИСОК / участников [title]" centred, followed by
+          the chairperson line and meeting date/time aligned right
+        - A single table with all participants in numbered rows; each row
+          contains the sequential number, the participant's LAST NAME /
+          First Name Patronymic, a dash separator, and their info/role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting to export
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: DOCX participants list file
+          headers:
+            Content-Disposition:
+              description: >
+                Attachment filename, e.g.
+                attachment; filename="participants-3fa85f64.docx"
               schema:
                 type: string
           content:
@@ -187,7 +303,7 @@ components:
           example: 42
         last_name:
           type: string
-          description: Last name (фамилия)
+          description: Last name (фамилия) — displayed in CAPS in documents
           example: Иванов
         first_name:
           type: string
@@ -199,35 +315,113 @@ components:
           example: Иванович
         info:
           type: string
-          description: Additional info (job title, department, etc.)
+          description: >
+            Role/position displayed in exported documents
+            (right column in Повестка and Список участников)
           example: Руководитель отдела
+
+    ParticipantCreate:
+      type: object
+      description: Payload for creating a new participant.
+      required:
+        - last_name
+        - first_name
+      properties:
+        last_name:
+          type: string
+          description: Last name (фамилия)
+          example: Сидоров
+        first_name:
+          type: string
+          description: First name (имя)
+          example: Алексей
+        middle_name:
+          type: string
+          description: Middle name / patronymic (отчество), optional
+          example: Петрович
+        info:
+          type: string
+          description: Role/position info
+          example: Главный аналитик
+
+    AgendaItemCreate:
+      type: object
+      description: >
+        A single agenda item submitted when creating a meeting.
+        Each item has its own speaker (докладчик), who must be present
+        in participant_ids.
+      required:
+        - text
+        - speaker_id
+      properties:
+        text:
+          type: string
+          description: >
+            Topic/title of the agenda item as it will appear
+            in the Повестка document
+          example: Об институте AIRI и видении применения ИИ в науке
+        speaker_id:
+          type: integer
+          description: >
+            ID of the participant presenting this item (докладчик).
+            Must also appear in participant_ids.
+          example: 17
+
+    AgendaItem:
+      type: object
+      description: An agenda item with its speaker fully resolved.
+      required:
+        - text
+        - speaker
+      properties:
+        text:
+          type: string
+          example: Об институте AIRI и видении применения ИИ в науке
+        speaker:
+          $ref: '#/components/schemas/Participant'
 
     MeetingCreate:
       type: object
       description: Payload for creating a new meeting.
       required:
         - title
+        - date
+        - chairperson_id
         - agenda_items
         - participant_ids
       properties:
         title:
           type: string
-          description: Meeting title / topic
-          example: Еженедельная планёрка
+          description: >
+            Meeting topic, placed after "ПОВЕСТКА / СПИСОК участников"
+            in the document header
+          example: совещания по вопросам поддержки применения ИИ в науке
+        date:
+          type: string
+          format: date-time
+          description: >
+            Date and time of the meeting (UTC, ISO 8601).
+            Rendered as a localised date/time string in document headers.
+          example: '2026-02-26T11:00:00Z'
+        chairperson_id:
+          type: integer
+          description: >
+            ID of the person chairing the meeting (председательствующий).
+            Their name and role appear in the header of both exported documents.
+            Must also be present in participant_ids.
+          example: 42
         agenda_items:
           type: array
-          description: List of agenda points for the meeting
+          description: Ordered list of agenda points, each with a speaker
           minItems: 1
           items:
-            type: string
-          example:
-            - Подведение итогов прошлой недели
-            - Планирование на следующую неделю
+            $ref: '#/components/schemas/AgendaItemCreate'
         participant_ids:
           type: array
           description: >
-            IDs of participants to include. Each ID must exist in the
-            database — validated via GET /participants before submission.
+            IDs of all participants listed in the Список участников.
+            Must include chairperson_id and all speaker_ids from agenda_items.
+            Each ID must exist in the database.
           minItems: 1
           items:
             type: integer
@@ -241,6 +435,8 @@ components:
       required:
         - id
         - title
+        - date
+        - chairperson
         - agenda_items
         - participants
         - created_at
@@ -252,26 +448,34 @@ components:
           example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
         title:
           type: string
-          description: Meeting title
-          example: Еженедельная планёрка
+          description: Meeting topic
+          example: совещания по вопросам поддержки применения ИИ в науке
+        date:
+          type: string
+          format: date-time
+          description: Date and time of the meeting (UTC, ISO 8601)
+          example: '2026-02-26T11:00:00Z'
+        chairperson:
+          description: Resolved chairperson object
+          allOf:
+            - $ref: '#/components/schemas/Participant'
         agenda_items:
           type: array
-          description: List of agenda points
+          description: Ordered agenda items with resolved speaker objects
           items:
-            type: string
-          example:
-            - Подведение итогов прошлой недели
-            - Планирование на следующую неделю
+            $ref: '#/components/schemas/AgendaItem'
         participants:
           type: array
-          description: Full participant objects resolved from the submitted IDs
+          description: >
+            Full participant objects for the Список участников,
+            in the order they were submitted
           items:
             $ref: '#/components/schemas/Participant'
         created_at:
           type: string
           format: date-time
-          description: Timestamp of creation (UTC, ISO 8601)
-          example: '2026-02-22T10:00:00Z'
+          description: Timestamp when the record was created (UTC, ISO 8601)
+          example: '2026-02-26T10:00:00Z'
 
     ErrorNotFound:
       type: object
@@ -280,6 +484,21 @@ components:
         message:
           type: string
           example: Not found
+
+    ErrorConflict:
+      type: object
+      description: Conflict error — resource already exists.
+      properties:
+        message:
+          type: string
+          description: Human-readable error summary
+          example: Participant already exists
+        details:
+          type: object
+          description: Optional structured details, e.g. ID of the existing record
+          additionalProperties: true
+          example:
+            existing_id: 55
 
     Error422:
       type: object
@@ -297,4 +516,3 @@ components:
             invalid_participant_ids:
               - 99
               - 100
-
