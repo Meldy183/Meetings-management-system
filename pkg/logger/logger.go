@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type LoggerKey struct{}
+type Key struct{}
 type Logger interface {
 	Debug(context context.Context, msg string, fields ...zap.Field)
 	Info(context context.Context, msg string, fields ...zap.Field)
@@ -36,7 +36,7 @@ func New(env string) Logger {
 	l := L{
 		z: logger,
 	}
-	return l
+	return &l
 }
 
 func (l *L) Debug(context context.Context, msg string, fields ...zap.Field) {
@@ -52,9 +52,9 @@ func (l *L) Error(context context.Context, msg string, fields ...zap.Field) {
 }
 
 func WithLogger(ctx context.Context, l Logger) context.Context {
-	return context.WithValue(ctx, LoggerKey{}, l)
+	return context.WithValue(ctx, Key{}, l)
 }
 
 func FromContext(ctx context.Context) Logger {
-	return ctx.Value(LoggerKey{}).(Logger)
+	return ctx.Value(Key{}).(Logger)
 }
