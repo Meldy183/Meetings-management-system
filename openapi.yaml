@@ -110,6 +110,56 @@ paths:
                   existing_id: 55
 
   /meetings:
+    get:
+      tags:
+        - meetings
+      summary: Get all meetings
+      description: >
+        Returns a paginated list of all meetings from the database,
+        ordered by date descending (newest first).
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Maximum number of meetings to return (default 20, max 100)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          example: 20
+        - name: offset
+          in: query
+          required: false
+          description: Number of meetings to skip for pagination
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          example: 0
+      responses:
+        '200':
+          description: List of meetings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingList'
+              example:
+                total: 42
+                limit: 20
+                offset: 0
+                items:
+                  - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                    title: совещания по вопросам поддержки применения ИИ в науке
+                    date: '2026-02-26T11:00:00Z'
+                    chairperson:
+                      id: 42
+                      last_name: Иванов
+                      first_name: Иван
+                      middle_name: Иванович
+                      info: Заместитель руководителя Секретариата
+                    created_at: '2026-02-26T10:00:00Z'
+
     post:
       tags:
         - meetings
@@ -196,6 +246,68 @@ paths:
                   invalid_participant_ids:
                     - 99
                     - 100
+
+  /meetings/{id}:
+    get:
+      tags:
+        - meetings
+      summary: Get meeting by ID
+      description: >
+        Returns the full meeting record for the specified UUID,
+        including resolved chairperson, agenda items with speakers,
+        and the complete participant list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Meeting found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+              example:
+                id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                title: совещания по вопросам поддержки применения ИИ в науке
+                date: '2026-02-26T11:00:00Z'
+                chairperson:
+                  id: 42
+                  last_name: Иванов
+                  first_name: Иван
+                  middle_name: Иванович
+                  info: Заместитель руководителя Секретариата
+                agenda_items:
+                  - text: Вступительное слово
+                    speaker:
+                      id: 42
+                      last_name: Иванов
+                      first_name: Иван
+                      middle_name: Иванович
+                      info: Заместитель руководителя Секретариата
+                participants:
+                  - id: 42
+                    last_name: Иванов
+                    first_name: Иван
+                    middle_name: Иванович
+                    info: Заместитель руководителя Секретариата
+                  - id: 17
+                    last_name: Петрова
+                    first_name: Мария
+                    middle_name: Сергеевна
+                    info: Ведущий инженер
+                created_at: '2026-02-26T10:00:00Z'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
 
   /meetings/{id}/export/agenda:
     get:
@@ -288,6 +400,63 @@ paths:
 
 components:
   schemas:
+
+    MeetingSummary:
+      type: object
+      description: >
+        Lightweight meeting record returned in list responses.
+        Contains only the fields needed for displaying a meeting in a list —
+        full details (agenda_items, participants) are fetched via GET /meetings/{id}.
+      required:
+        - id
+        - title
+        - date
+        - chairperson
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        title:
+          type: string
+          example: совещания по вопросам поддержки применения ИИ в науке
+        date:
+          type: string
+          format: date-time
+          example: '2026-02-26T11:00:00Z'
+        chairperson:
+          description: Resolved chairperson object
+          allOf:
+            - $ref: '#/components/schemas/Participant'
+        created_at:
+          type: string
+          format: date-time
+          example: '2026-02-26T10:00:00Z'
+
+    MeetingList:
+      type: object
+      description: Paginated list of meetings.
+      required:
+        - total
+        - limit
+        - offset
+        - items
+      properties:
+        total:
+          type: integer
+          description: Total number of meetings in the database (for pagination)
+          example: 42
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MeetingSummary'
 
     Participant:
       type: object
