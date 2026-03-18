@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// implement me
+// ParticipantCreateRequest implement me
 // Request models
 type ParticipantCreateRequest struct {
 	LastName   string `json:"last_name"`
@@ -22,7 +22,7 @@ type MeetingCreateRequest struct {
 	ParticipantIDs []int                     `json:"participant_ids"`
 }
 
-// Response models
+// ParticipantResponse Response models
 type ParticipantResponse struct {
 	ID         int    `json:"id"`
 	LastName   string `json:"last_name"`

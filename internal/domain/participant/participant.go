@@ -1,6 +1,7 @@
 package participant
 
-// implement me
+import "context"
+
 type Participant struct {
 	ID         int
 	LastName   string
@@ -8,9 +9,9 @@ type Participant struct {
 	MiddleName string
 	Info       string
 }
+
 type Repository interface {
-	// implement me
+	Create(ctx context.Context, p *Participant) (*Participant, error)
 	FindByName(lastName, firstName, middleName string) (*Participant, error)
-	Create(p *Participant) (*Participant, error)
 	GetByIDs(ids []int) ([]Participant, error)
 }
