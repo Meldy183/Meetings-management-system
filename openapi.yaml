@@ -109,6 +109,88 @@ paths:
                 details:
                   existing_id: 55
 
+  /participants/{id}:
+    put:
+      tags:
+        - participants
+      summary: Update a participant
+      description: >
+        Updates an existing participant's fields. All fields from ParticipantCreate
+        may be changed. Returns 409 if the new name combination already belongs
+        to a different participant.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Participant ID to update
+          schema:
+            type: integer
+          example: 42
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ParticipantCreate'
+            example:
+              last_name: Иванов
+              first_name: Иван
+              middle_name: Иванович
+              info: Директор департамента
+      responses:
+        '200':
+          description: Participant updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Participant'
+        '404':
+          description: Participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Another participant with the same name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+
+    delete:
+      tags:
+        - participants
+      summary: Delete a participant
+      description: >
+        Permanently removes a participant from the database.
+        Returns 409 if the participant is referenced in one or more existing meetings
+        (FK constraint prevents deletion).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Participant ID to delete
+          schema:
+            type: integer
+          example: 42
+      responses:
+        '204':
+          description: Participant deleted successfully
+        '404':
+          description: Participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Participant is referenced in existing meetings and cannot be deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: Participant is referenced in existing meetings
+
   /meetings:
     get:
       tags:
