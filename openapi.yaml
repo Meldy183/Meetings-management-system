@@ -22,14 +22,29 @@ paths:
     get:
       tags:
         - participants
-      summary: List all participants
+      summary: List or search participants
       description: >
-        Returns all participants ordered by last_name, first_name.
-        Filtering is performed client-side using word-by-word partial
-        matching against the full name string.
+        Without `q`: returns all participants ordered by last_name, first_name.
+
+        With `q`: performs a word-by-word partial match search. The query is split
+        on whitespace into words; every word must appear somewhere in the
+        concatenated name string (case-insensitive). Backed by a PostgreSQL GIN
+        trigram index (pg_trgm) — efficient up to ~100k rows. Returns up to 100
+        results.
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: >
+            Optional search string. Split on whitespace; each word is matched
+            as a substring of the full name. Example: "иван пет" matches
+            "Иван Петров".
+          schema:
+            type: string
+          example: Иванов Иван
       responses:
         '200':
-          description: List of all participants
+          description: List of participants (all, or matching q)
           content:
             application/json:
               schema:
@@ -373,6 +388,193 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
+    put:
+      tags:
+        - meetings
+      summary: Update meeting title, date, or chairperson
+      description: >
+        Updates the title, date, and/or chairperson of an existing meeting.
+        The new chairperson_id must already be a participant of this meeting
+        (returns 422 otherwise). Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MeetingUpdate'
+            example:
+              title: обновлённое название совещания
+              date: '2026-03-01T10:00:00Z'
+              chairperson_id: 17
+      responses:
+        '200':
+          description: Meeting updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: >
+            chairperson_id is not a participant of this meeting,
+            or one of the referenced IDs does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: chairperson must be a participant of the meeting
+
+    delete:
+      tags:
+        - meetings
+      summary: Delete a meeting
+      description: >
+        Permanently deletes the meeting and all associated agenda items and
+        meeting_participants records (cascade). This action is irreversible.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting to delete
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '204':
+          description: Meeting deleted successfully
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+  /meetings/{id}/participants:
+    post:
+      tags:
+        - meetings
+      summary: Add a participant to an existing meeting
+      description: >
+        Adds an existing participant (by ID) to the specified meeting's
+        participant list. The participant is appended to the end of the list.
+        Returns 409 if the participant is already in the meeting.
+        Returns 422 if the participant ID does not exist in the database.
+        Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMeetingParticipant'
+            example:
+              participant_id: 55
+      responses:
+        '200':
+          description: Participant added; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Participant is already in this meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: participant already in meeting
+        '422':
+          description: Participant ID does not exist in the database
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: participant not found
+
+  /meetings/{id}/participants/{pid}:
+    delete:
+      tags:
+        - meetings
+      summary: Remove a participant from a meeting
+      description: >
+        Removes a participant from the specified meeting's participant list.
+        Returns 409 if the participant is the meeting's chairperson (change
+        chairperson first via PUT /meetings/{id}) or if the participant is
+        a speaker on any agenda item of this meeting (remove or reassign the
+        agenda item first).
+        Returns the full updated Meeting object on success.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: pid
+          in: path
+          required: true
+          description: Participant ID to remove from the meeting
+          schema:
+            type: integer
+          example: 55
+      responses:
+        '200':
+          description: Participant removed; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting or participant not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: >
+            Cannot remove participant — they are the chairperson or a speaker
+            on an agenda item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: cannot remove chairperson from meeting
+
   /meetings/{id}/participants/order:
     put:
       tags:
@@ -424,6 +626,148 @@ paths:
                 $ref: '#/components/schemas/Error422'
               example:
                 message: participant IDs must exactly match the meeting's current participants
+
+  /meetings/{id}/agenda:
+    post:
+      tags:
+        - meetings
+      summary: Add an agenda item to an existing meeting
+      description: >
+        Appends a new agenda item to the meeting. The speaker_id must
+        already be a participant of this meeting (returns 422 otherwise).
+        Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaItemUpsert'
+            example:
+              text: Новый пункт повестки
+              speaker_id: 42
+      responses:
+        '200':
+          description: Agenda item added; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: speaker_id is not a participant of this meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: speaker must be a participant of the meeting
+
+  /meetings/{id}/agenda/{item_id}:
+    put:
+      tags:
+        - meetings
+      summary: Update an agenda item
+      description: >
+        Updates the text and/or speaker of the specified agenda item.
+        The new speaker_id must already be a participant of this meeting
+        (returns 422 otherwise). Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: item_id
+          in: path
+          required: true
+          description: ID of the agenda item to update
+          schema:
+            type: integer
+          example: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaItemUpsert'
+            example:
+              text: Обновлённый текст пункта
+              speaker_id: 17
+      responses:
+        '200':
+          description: Agenda item updated; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting or agenda item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: speaker_id is not a participant of this meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: speaker must be a participant of the meeting
+
+    delete:
+      tags:
+        - meetings
+      summary: Delete an agenda item
+      description: >
+        Removes the specified agenda item from the meeting.
+        Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: item_id
+          in: path
+          required: true
+          description: ID of the agenda item to delete
+          schema:
+            type: integer
+          example: 3
+      responses:
+        '200':
+          description: Agenda item deleted; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting or agenda item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
 
   /meetings/{id}/agenda/order:
     put:
@@ -865,6 +1209,62 @@ components:
           example:
             - 17
             - 42
+
+    MeetingUpdate:
+      type: object
+      description: >
+        Payload for updating an existing meeting's title, date, and/or chairperson.
+        All fields are required — send the full desired state.
+      required:
+        - title
+        - date
+        - chairperson_id
+      properties:
+        title:
+          type: string
+          description: New meeting title
+          example: обновлённое название совещания
+        date:
+          type: string
+          format: date-time
+          description: New date and time of the meeting (UTC, ISO 8601)
+          example: '2026-03-01T10:00:00Z'
+        chairperson_id:
+          type: integer
+          description: >
+            ID of the new chairperson. Must already be a participant of this meeting.
+          example: 17
+
+    AddMeetingParticipant:
+      type: object
+      description: Payload for adding a participant to an existing meeting.
+      required:
+        - participant_id
+      properties:
+        participant_id:
+          type: integer
+          description: ID of the participant to add to the meeting
+          example: 55
+
+    AgendaItemUpsert:
+      type: object
+      description: >
+        Payload for creating or updating an agenda item.
+        Used by both POST /meetings/{id}/agenda and PUT /meetings/{id}/agenda/{item_id}.
+      required:
+        - text
+        - speaker_id
+      properties:
+        text:
+          type: string
+          description: Topic/title of the agenda item
+          example: Об институте AIRI и видении применения ИИ в науке
+        speaker_id:
+          type: integer
+          description: >
+            ID of the participant presenting this item (докладчик).
+            Must already be a participant of this meeting.
+          example: 42
 
     ErrorNotFound:
       type: object
