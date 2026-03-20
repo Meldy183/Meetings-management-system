@@ -31,6 +31,7 @@ type ParticipantResponse struct {
 	Info       string `json:"info,omitempty"`
 }
 type AgendaItemResponse struct {
+	ID      int                 `json:"id"`
 	Text    string              `json:"text"`
 	Speaker ParticipantResponse `json:"speaker"`
 }
@@ -59,6 +60,10 @@ type MeetingListResponse struct {
 }
 type ReorderParticipantsRequest struct {
 	ParticipantIDs []int `json:"participant_ids"`
+}
+
+type ReorderAgendaItemsRequest struct {
+	AgendaItemIDs []int `json:"agenda_item_ids"`
 }
 
 type ErrorResponse struct {

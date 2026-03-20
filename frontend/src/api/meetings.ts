@@ -30,6 +30,13 @@ export function reorderParticipants(meetingId: string, participantIds: number[])
   })
 }
 
+export function reorderAgendaItems(meetingId: string, agendaItemIds: number[]): Promise<void> {
+  return apiFetch<void>(`/meetings/${meetingId}/agenda/order`, {
+    method: 'PUT',
+    body: JSON.stringify({ agenda_item_ids: agendaItemIds }),
+  })
+}
+
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')

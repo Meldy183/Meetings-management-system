@@ -40,11 +40,19 @@ func (e *ErrParticipantSetMismatch) Error() string {
 	return "participant IDs must exactly match the meeting's current participants"
 }
 
+// ErrAgendaItemSetMismatch is returned when the provided IDs don't match the meeting's agenda items.
+type ErrAgendaItemSetMismatch struct{}
+
+func (e *ErrAgendaItemSetMismatch) Error() string {
+	return "agenda item IDs must exactly match the meeting's current agenda items"
+}
+
 type Service interface {
 	GetAll(ctx context.Context, limit, offset int) ([]domMeeting.Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*domMeeting.Meeting, error)
 	Create(ctx context.Context, req *CreateRequest) (*domMeeting.Meeting, error)
 	ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error
+	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
 }
 
 type service struct {
@@ -149,4 +157,29 @@ func (s *service) ReorderParticipants(ctx context.Context, meetingID string, par
 	}
 
 	return s.repo.ReorderParticipants(ctx, meetingID, participantIDs)
+}
+
+func (s *service) ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "service: reorder agenda items", zap.String("meeting_id", meetingID))
+
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return err
+	}
+
+	if len(agendaItemIDs) != len(m.AgendaItems) {
+		return &ErrAgendaItemSetMismatch{}
+	}
+	existing := make(map[int]struct{}, len(m.AgendaItems))
+	for _, item := range m.AgendaItems {
+		existing[item.ID] = struct{}{}
+	}
+	for _, id := range agendaItemIDs {
+		if _, ok := existing[id]; !ok {
+			return &ErrAgendaItemSetMismatch{}
+		}
+	}
+
+	return s.repo.ReorderAgendaItems(ctx, meetingID, agendaItemIDs)
 }
