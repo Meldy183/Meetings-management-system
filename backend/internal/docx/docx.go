@@ -23,8 +23,7 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА", 28)))
-	body.WriteString(para(pPrCenter() + tnr("совещания "+m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА совещания "+m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	body.WriteString(para(pPrCenter() + tnr(fullName(m.Chairperson), 28)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
@@ -46,8 +45,7 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК", 28)))
-	body.WriteString(para(pPrCenter() + tnr("участников совещания "+m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК участников совещания "+m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	body.WriteString(para(pPrCenter() + tnr(fullName(m.Chairperson), 28)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
