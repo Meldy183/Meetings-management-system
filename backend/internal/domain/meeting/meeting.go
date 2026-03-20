@@ -1,6 +1,7 @@
 package meeting
 
 import (
+	"context"
 	"meetings-editor/internal/domain/participant"
 	"time"
 )
@@ -20,8 +21,7 @@ type Meeting struct {
 	CreatedAt    time.Time
 }
 type Repository interface {
-	// implement me
-	GetAll(limit, offset int) ([]Meeting, int, error)
-	GetByID(id string) (*Meeting, error)
-	Create(m *Meeting) (*Meeting, error)
+	GetAll(ctx context.Context, limit, offset int) ([]Meeting, int, error)
+	GetByID(ctx context.Context, id string) (*Meeting, error)
+	Create(ctx context.Context, m *Meeting) (*Meeting, error)
 }
