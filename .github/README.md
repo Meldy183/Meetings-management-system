@@ -1,18 +1,6 @@
 # Meetings Editor
 
-A backend for creating and exporting meeting records, served as a web app (future: Telegram Mini App).
-
----
-
-## MVP 0 Notes (original, in Russian)
-1) на фронте храним список участников и там делаем мэтчинг фио - существует или нет
-2) ручка которая получает фио человека и возвращает структуру с ним и инфе по нему
-3) ручка получает фио и досье и добавляет в бд
-4) ручка которая создает встречу (прокидывает повестку, пункты и участников) и создает встречу в бд, возвращает айди созданной встречи
-5) ручка получает встречу по айди и возвращает по ней всю инфу (обратная)
-6) ручка получает айди встречи и возвращает .docx
-
-Усложнять будем потом (экспорт второго файла участников, кто какие пункты ведёт)
+A web app (future: Telegram Mini App) for a secretary to record official meetings and export them as `.docx` documents matching a fixed government-style template.
 
 ---
 
@@ -28,7 +16,7 @@ Browser (mobile web app)
   Go HTTP Server  ──►  PostgreSQL
         │
         ▼ (export)
-   .docx file (template-based)
+   .docx file (generated in-memory as raw OOXML)
 ```
 
 - The backend is a **standard Go HTTP server** — no Telegram-specific SDK required on the server side.
@@ -41,10 +29,12 @@ Browser (mobile web app)
 | Layer | Technology |
 |-------|-----------|
 | Backend | Go (net/http) |
-| Database | PostgreSQL |
-| Document generation | [`github.com/nguyenthenguyen/docx`](https://github.com/nguyenthenguyen/docx) |
-| Frontend | React (SPA) |
+| Database | PostgreSQL (pgx/v5, pgxpool) |
+| Logging | go.uber.org/zap |
+| Document generation | Raw OOXML (.docx) — generated in-memory, no external library |
+| Frontend | React 18 + TypeScript, Vite, TanStack Query, Tailwind CSS |
 | API contract | OpenAPI 3.0.3 (`openapi.yaml` at repo root) |
+| Deployment | Docker Compose (db + migrate + backend + nginx/frontend) |
 
 ---
 
@@ -59,6 +49,7 @@ Browser (mobile web app)
 | `GET` | `/meetings` | List all meetings (paginated) |
 | `POST` | `/meetings` | Create a meeting record |
 | `GET` | `/meetings/{id}` | Get full meeting details |
+| `PUT` | `/meetings/{id}/participants/order` | Reorder participants within a meeting |
 | `GET` | `/meetings/{id}/export/agenda` | Export agenda as `.docx` |
 | `GET` | `/meetings/{id}/export/participants` | Export participant list as `.docx` |
 
@@ -74,56 +65,86 @@ See [`openapi.yaml`](../openapi.yaml) for the full specification.
 4. Add **agenda items** — each item has a text and a speaker picked from the participant list
 5. Submit ("Зафиксировать") → single `POST /meetings`
 
+After creation, participant order can be adjusted on the meeting detail page via drag-and-drop.
+
 ---
 
 ## Getting Started
 
-### Prerequisites
+### Option A — Docker Compose (recommended)
 
-- Go 1.21+
-- PostgreSQL
+```bash
+docker compose up --build
+```
+
+Starts PostgreSQL, runs migrations, builds and serves the Go backend and React frontend.
+Frontend available at `http://localhost:80`.
+
+### Option B — Backend only
+
+**Prerequisites:** Go 1.22+, PostgreSQL, [golang-migrate](https://github.com/golang-migrate/migrate)
+
+```bash
+# Run migrations
+migrate -path ./backend/migrations \
+        -database "postgres://meetings:meetings@localhost:5432/meetings_editor?sslmode=disable" up
+
+# Start backend
+cd backend
+DATABASE_URL="postgres://meetings:meetings@localhost:5432/meetings_editor?sslmode=disable" \
+PORT=8080 \
+go run ./cmd/api
+```
 
 ### Environment Variables
 
-```env
-DATABASE_URL=postgres://user:password@localhost:5432/meetings?sslmode=disable
-PORT=8080
-```
-
-### Run
-
-```bash
-go mod download
-go run ./cmd/server
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_URL` | — | PostgreSQL DSN |
+| `PORT` | `:8080` | HTTP listen address |
+| `ENV` | `dev` | `dev` for human-readable logs, `prod` for JSON |
 
 ---
 
 ## Document Export
 
-`.docx` templates live in `templates/`. Placeholders use the `{tag}` syntax:
+Documents are generated in-memory as raw OOXML (`.docx` zip archives) — no template files or external libraries are required.
 
-| Tag | Description |
-|-----|-------------|
-| `{title}` | Meeting title |
-| `{date}` | Meeting date |
-| `{participants}` | Participant list |
-| `{agenda_items}` | Agenda items |
+**Formatting matches the official government template:**
+- Font: Times New Roman 14pt throughout
+- Page: A4 with standard margins
+- Date: bold, right-aligned, in Russian format (`11 февраля 2026 г., 11.00`)
+- Agenda items: bold text, Roman numerals (I, II, III…)
+- "Докладчик:" label: bold + underlined, centred
+- Tables: borderless, 3-column (name | – | info) for speakers; 4-column (№ | name | – | info) for participants
+- Participant names: LASTNAME on line 1, Firstname Patronymic on line 2 within the same cell
 
 ---
 
 ## Project Structure
 
 ```
-backend/
-├── cmd/
-│   └── server/         # Entry point
-├── internal/
-│   ├── handler/        # HTTP handlers
-│   ├── service/        # Business logic
-│   └── repository/     # DB queries
-├── migrations/         # SQL migration files
-├── templates/          # .docx templates
-├── config/             # Configuration
-└── go.mod
+meetings-editor/
+├── backend/
+│   ├── cmd/api/            # Entry point
+│   ├── config/             # Environment config
+│   ├── internal/
+│   │   ├── docx/           # OOXML document generator
+│   │   ├── domain/         # Domain models + repository interfaces
+│   │   ├── repository/postgres/  # pgx repository implementations
+│   │   ├── service/        # Business logic
+│   │   └── transport/http/ # Handlers, middleware, HTTP models
+│   ├── migrations/         # SQL migration files (golang-migrate)
+│   ├── examples/           # Reference .docx files used as formatting target
+│   └── go.mod
+├── frontend/
+│   ├── src/
+│   │   ├── api/            # Typed API client (types, fetch wrappers)
+│   │   ├── components/     # Reusable UI components
+│   │   └── pages/          # Route-level page components
+│   ├── Dockerfile
+│   └── nginx.conf
+├── decisions/              # Architecture decisions and plans
+├── openapi.yaml            # API contract (source of truth)
+└── docker-compose.yml
 ```

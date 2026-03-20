@@ -21,7 +21,7 @@ No UI component library. Plain Tailwind only for MVP0.
 |---|---|---|
 | `/` | MeetingListPage | Paginated meeting list, "Load more" |
 | `/meetings/new` | CreateMeetingPage | 5-step meeting creation wizard |
-| `/meetings/:id` | MeetingDetailPage | Full meeting info + DOCX export buttons |
+| `/meetings/:id` | MeetingDetailPage | Full meeting info, participant drag-and-drop reorder, DOCX export buttons |
 | `/participants` | ParticipantsPage | Browse, edit, delete participants; add new |
 
 ---
@@ -31,10 +31,22 @@ No UI component library. Plain Tailwind only for MVP0.
 1. **Title + Date** — text input + datetime-local input
 2. **Participants** — search by exact last/first/middle name → add to list. If 404 → "Add to database" inline form. Edit button per participant opens inline edit form.
 3. **Chairperson** — radio button list, pick one from assembled participants
-4. **Agenda Items** — add items: text + speaker dropdown (from participant list). Reorderable list.
+4. **Agenda Items** — add items: text + speaker dropdown (from participant list).
 5. **Review + Submit** — summary of everything, "Зафиксировать" button → POST /meetings
 
 State lives in `useReducer` inside CreateMeetingPage for the duration of the wizard. Nothing is persisted to the server until step 5.
+
+---
+
+## Participant Reorder (Meeting Detail)
+
+On the MeetingDetailPage, the participants list supports drag-and-drop reordering using the native HTML5 DnD API (no extra library).
+
+- Each row has a `⠿` grab handle
+- Dragging fades the source row and highlights the drop target in blue
+- On drop: local state is updated immediately (optimistic), then `PUT /meetings/{id}/participants/order` is called with the full ordered ID array
+- On error: local state reverts to the last server-confirmed order
+- "Сохранение..." / "Ошибка сохранения" shown inline
 
 ---
 
@@ -43,7 +55,7 @@ State lives in `useReducer` inside CreateMeetingPage for the duration of the wiz
 - `types.ts` — TypeScript interfaces mirroring OpenAPI schemas
 - `client.ts` — base fetch wrapper with JSON handling and error parsing
 - `participants.ts` — searchParticipant, createParticipant, updateParticipant, deleteParticipant
-- `meetings.ts` — getMeetings, createMeeting, getMeeting, exportAgenda, exportParticipants
+- `meetings.ts` — getMeetings, createMeeting, getMeeting, reorderParticipants, downloadAgenda, downloadParticipants
 
 Export endpoints trigger browser file download via `URL.createObjectURL(blob)`.
 
@@ -67,7 +79,7 @@ src/
 ├── pages/
 │   ├── MeetingListPage.tsx
 │   ├── CreateMeetingPage.tsx
-│   ├── MeetingDetailPage.tsx
+│   ├── MeetingDetailPage.tsx   # Includes DnD participant reorder
 │   └── ParticipantsPage.tsx
 ├── App.tsx
 └── main.tsx
@@ -82,15 +94,4 @@ src/
 - At least 1 participant required
 - At least 1 agenda item required
 - speaker_id required per agenda item (no optional speakers)
-
----
-
-## Implementation Order
-
-1. Project scaffold (Vite + TS + Tailwind)
-2. `src/api/` layer — types + client + all endpoint functions
-3. App.tsx + routing
-4. MeetingListPage
-5. MeetingDetailPage
-6. CreateMeetingPage (most complex — do last among pages)
-7. ParticipantsPage
+- Participant reorder PUT body must contain exactly the same IDs as the current meeting (enforced server-side with 422)

@@ -23,8 +23,8 @@ meetings-editor/
 ├── decisions/        # Architecture decisions and plans (this directory)
 │   ├── project-context.md   ← you are here
 │   └── frontend-plan.md
-├── openapi.yaml      # Single source of truth for API contract (shared)
-└── docker-compose.yml (planned)
+├── openapi.yaml      # Single source of truth for API contract
+└── docker-compose.yml
 ```
 
 ---
@@ -35,9 +35,10 @@ meetings-editor/
 |---|---|
 | Backend | Go, net/http, pgx/v5 (PostgreSQL), zap (logging) |
 | Database | PostgreSQL |
-| Document generation | github.com/nguyenthenguyen/docx |
+| Document generation | Raw OOXML — generated in-memory, no external library |
 | Frontend | React 18 + TypeScript, Vite, TanStack Query, React Hook Form, Tailwind CSS |
 | API contract | OpenAPI 3.0.3 — `openapi.yaml` at repo root |
+| Deployment | Docker Compose (db + migrate + backend + nginx/frontend) |
 
 ---
 
@@ -56,7 +57,7 @@ meetings-editor/
 - `date` (ISO 8601 datetime, UTC) — date and time of the meeting
 - `chairperson` — resolved Participant object (председательствующий)
 - `agenda_items` — ordered list of `{ text, speaker }` (speaker is resolved Participant)
-- `participants` — full list of Participant objects for the Список участников
+- `participants` — ordered list of Participant objects for the Список участников; order is user-controlled via the reorder endpoint
 - `created_at` — record creation timestamp
 
 ### Constraints (enforced on both frontend and backend)
@@ -77,6 +78,7 @@ meetings-editor/
 | GET | `/meetings` | Paginated list, ordered newest first. Params: limit (default 20, max 100), offset. |
 | POST | `/meetings` | Create meeting in one shot. Returns 422 if any ID doesn't exist. |
 | GET | `/meetings/{id}` | Full meeting details (resolved objects). |
+| PUT | `/meetings/{id}/participants/order` | Reorder participants. Body: `{ participant_ids: [...] }` — must be same set, new order. Returns 422 on set mismatch. |
 | GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx |
 | GET | `/meetings/{id}/export/participants` | Download Список участников as .docx |
 
@@ -106,6 +108,8 @@ User adds agenda items: each has a text field and a speaker dropdown (populated 
 **Step 5 — Submit**
 Review screen + "Зафиксировать" button → single POST /meetings with all data.
 
+After creation, the participant order can be changed on the meeting detail page via drag-and-drop (calls PUT /meetings/{id}/participants/order).
+
 ---
 
 ## Participant Search Behaviour
@@ -120,14 +124,14 @@ Known limitation: typos will return 404, potentially causing accidental duplicat
 
 Clicking export triggers a direct file download via the browser's download mechanism (`URL.createObjectURL` + anchor click). No preview.
 
+Documents are generated in-memory as raw OOXML — no template files on disk. Formatting targets the official government template (Times New Roman 14pt, A4, Russian date format, borderless tables).
+
 ---
 
 ## What's Deferred (Post-MVP0)
 
 - Telegram Mini App SDK integration (MainButton, BackButton, initData)
 - Fuzzy/prefix participant search
-- Second export document was already in scope for MVP0 (Список участников — done)
-- Per-item speaker tracking — already in MVP0
 - Participant deletion when referenced in meetings (currently blocked by FK)
 - Meeting editing or deletion
 
@@ -135,5 +139,23 @@ Clicking export triggers a direct file download via the browser's download mecha
 
 ## Running Locally
 
-See `backend/README.md` for backend setup.
-Frontend: `cd frontend && npm install && npm run dev`
+### Docker Compose (recommended)
+
+```bash
+docker compose up --build
+```
+
+### Backend only
+
+```bash
+cd backend
+DATABASE_URL="postgres://user:password@localhost:5432/meetings_editor?sslmode=disable" \
+PORT=8080 \
+go run ./cmd/api
+```
+
+### Frontend only
+
+```bash
+cd frontend && npm install && npm run dev
+```
