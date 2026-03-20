@@ -27,15 +27,15 @@ Browser (mobile web app)
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go (net/http, Go 1.22+) |
-| Database | PostgreSQL (pgx/v5, pgxpool) |
-| Logging | go.uber.org/zap |
+| Layer | Technology                                                   |
+|-------|--------------------------------------------------------------|
+| Backend | Go (net/http, Go 1.22+)                                      |
+| Database | PostgreSQL (pgx/v5, pgxpool)                                 |
+| Logging | go.uber.org/zap                                              |
 | Document generation | Raw OOXML (.docx) — generated in-memory, no external library |
-| Frontend | React 18 + TypeScript, Vite, TanStack Query, Tailwind CSS |
-| API contract | OpenAPI 3.0.3 (`openapi.yaml` at repo root) |
-| Deployment | Docker Compose (db + migrate + backend + nginx/frontend) |
+| Frontend | React 18 + TypeScript, Vite, TanStack Query, Tailwind CSS    |
+| API contract | OpenAPI 3.0.3 (`openapi.yaml` at repo root)                  |
+| Deployment | Docker Compose (db + migrate + backend + nginx/frontend)     |
 
 ---
 
