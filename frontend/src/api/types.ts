@@ -19,6 +19,7 @@ export interface AgendaItemCreate {
 }
 
 export interface AgendaItem {
+  id: number
   text: string
   speaker: Participant
 }

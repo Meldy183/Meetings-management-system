@@ -161,6 +161,42 @@ func (h *MeetingHandler) ReorderParticipants(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// PUT /meetings/{id}/agenda/order
+func (h *MeetingHandler) ReorderAgendaItems(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	var req model.ReorderAgendaItemsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	if len(req.AgendaItemIDs) == 0 {
+		respondError(w, http.StatusBadRequest, "agenda_item_ids must not be empty", nil)
+		return
+	}
+
+	err := h.svc.ReorderAgendaItems(r.Context(), id, req.AgendaItemIDs)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		var mismatch *svcMeeting.ErrAgendaItemSetMismatch
+		if errors.As(err, &mismatch) {
+			respondError(w, http.StatusUnprocessableEntity, mismatch.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GET /meetings/{id}/export/agenda
 func (h *MeetingHandler) ExportAgenda(w http.ResponseWriter, r *http.Request) {
 	m, ok := h.fetchMeeting(w, r)
@@ -257,6 +293,7 @@ func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
 	items := make([]model.AgendaItemResponse, 0, len(m.AgendaItems))
 	for _, item := range m.AgendaItems {
 		items = append(items, model.AgendaItemResponse{
+			ID:      item.ID,
 			Text:    item.Text,
 			Speaker: toParticipantResp(item.Speaker),
 		})

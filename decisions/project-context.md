@@ -79,6 +79,7 @@ meetings-editor/
 | POST | `/meetings` | Create meeting in one shot. Returns 422 if any ID doesn't exist. |
 | GET | `/meetings/{id}` | Full meeting details (resolved objects). |
 | PUT | `/meetings/{id}/participants/order` | Reorder participants. Body: `{ participant_ids: [...] }` — must be same set, new order. Returns 422 on set mismatch. |
+| PUT | `/meetings/{id}/agenda/order` | Reorder agenda items. Body: `{ agenda_item_ids: [...] }` — must be same set, new order. Returns 422 on set mismatch. |
 | GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx |
 | GET | `/meetings/{id}/export/participants` | Download Список участников as .docx |
 
@@ -108,7 +109,7 @@ User adds agenda items: each has a text field and a speaker dropdown (populated 
 **Step 5 — Submit**
 Review screen + "Зафиксировать" button → single POST /meetings with all data.
 
-After creation, the participant order can be changed on the meeting detail page via drag-and-drop (calls PUT /meetings/{id}/participants/order).
+After creation, both participant order and agenda item order can be changed on the meeting detail page via drag-and-drop (calls the respective PUT reorder endpoints).
 
 ---
 

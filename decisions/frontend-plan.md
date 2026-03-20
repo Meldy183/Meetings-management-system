@@ -38,15 +38,17 @@ State lives in `useReducer` inside CreateMeetingPage for the duration of the wiz
 
 ---
 
-## Participant Reorder (Meeting Detail)
+## Drag-and-Drop Reorder (Meeting Detail)
 
-On the MeetingDetailPage, the participants list supports drag-and-drop reordering using the native HTML5 DnD API (no extra library).
+Both the agenda items list and the participants list on MeetingDetailPage support drag-and-drop reordering using the native HTML5 DnD API (no extra library). The logic is extracted into a shared `useDragReorder` hook.
 
 - Each row has a `⠿` grab handle
 - Dragging fades the source row and highlights the drop target in blue
-- On drop: local state is updated immediately (optimistic), then `PUT /meetings/{id}/participants/order` is called with the full ordered ID array
+- On drop: local state is updated immediately (optimistic), then the relevant `PUT` endpoint is called with the full ordered ID array
+  - Agenda: `PUT /meetings/{id}/agenda/order` with `{ agenda_item_ids: [...] }`
+  - Participants: `PUT /meetings/{id}/participants/order` with `{ participant_ids: [...] }`
 - On error: local state reverts to the last server-confirmed order
-- "Сохранение..." / "Ошибка сохранения" shown inline
+- "Сохранение..." / "Ошибка сохранения" shown inline per list
 
 ---
 
@@ -55,7 +57,7 @@ On the MeetingDetailPage, the participants list supports drag-and-drop reorderin
 - `types.ts` — TypeScript interfaces mirroring OpenAPI schemas
 - `client.ts` — base fetch wrapper with JSON handling and error parsing
 - `participants.ts` — searchParticipant, createParticipant, updateParticipant, deleteParticipant
-- `meetings.ts` — getMeetings, createMeeting, getMeeting, reorderParticipants, downloadAgenda, downloadParticipants
+- `meetings.ts` — getMeetings, createMeeting, getMeeting, reorderParticipants, reorderAgendaItems, downloadAgenda, downloadParticipants
 
 Export endpoints trigger browser file download via `URL.createObjectURL(blob)`.
 

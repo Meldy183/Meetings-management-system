@@ -443,6 +443,59 @@ paths:
               example:
                 message: participant IDs must exactly match the meeting's current participants
 
+  /meetings/{id}/agenda/order:
+    put:
+      tags:
+        - meetings
+      summary: Reorder agenda items within a meeting
+      description: >
+        Replaces the display order of agenda items for the specified meeting.
+        The request body must contain exactly the same set of agenda item IDs
+        already attached to the meeting — only their order changes.
+        The new order is persisted and reflected in subsequent GET /meetings/{id}
+        responses and in the Повестка export.
+        Returns 422 if the provided IDs do not exactly match the meeting's
+        current agenda items (wrong count or unknown ID).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID of the meeting
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgendaItemOrder'
+            example:
+              agenda_item_ids:
+                - 3
+                - 1
+                - 2
+      responses:
+        '204':
+          description: Order updated successfully
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: >
+            Provided agenda_item_ids do not exactly match the meeting's
+            current agenda items (wrong count or unknown ID).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: agenda item IDs must exactly match the meeting's current agenda items
+
   /meetings/{id}/export/agenda:
     get:
       tags:
@@ -672,11 +725,18 @@ components:
 
     AgendaItem:
       type: object
-      description: An agenda item with its speaker fully resolved.
+      description: >
+        An agenda item with its speaker fully resolved.
+        The id field is used when reordering via PUT /meetings/{id}/agenda/order.
       required:
+        - id
         - text
         - speaker
       properties:
+        id:
+          type: integer
+          description: Unique agenda item identifier
+          example: 1
         text:
           type: string
           example: Об институте AIRI и видении применения ИИ в науке
@@ -780,6 +840,28 @@ components:
           format: date-time
           description: Timestamp when the record was created (UTC, ISO 8601)
           example: '2026-02-26T10:00:00Z'
+
+    AgendaItemOrder:
+      type: object
+      description: >
+        Payload for reordering agenda items within a meeting.
+        Must contain exactly the same IDs already attached to the meeting.
+      required:
+        - agenda_item_ids
+      properties:
+        agenda_item_ids:
+          type: array
+          description: >
+            All agenda item IDs of the meeting in the desired new order.
+            Must be the same set as the current agenda items — no additions
+            or removals, only reordering.
+          minItems: 1
+          items:
+            type: integer
+          example:
+            - 3
+            - 1
+            - 2
 
     ParticipantOrder:
       type: object

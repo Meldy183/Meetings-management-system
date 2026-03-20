@@ -8,6 +8,7 @@ import (
 
 // implement me
 type AgendaItem struct {
+	ID      int
 	Text    string
 	Speaker participant.Participant
 }
@@ -25,4 +26,5 @@ type Repository interface {
 	GetByID(ctx context.Context, id string) (*Meeting, error)
 	Create(ctx context.Context, m *Meeting) (*Meeting, error)
 	ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error
+	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
 }

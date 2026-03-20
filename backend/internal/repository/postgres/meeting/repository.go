@@ -22,7 +22,8 @@ const (
 
 	queryInsertAgendaItem = `
 		INSERT INTO agenda_items (meeting_id, position, text, speaker_id)
-		VALUES ($1, $2, $3, $4)`
+		VALUES ($1, $2, $3, $4)
+		RETURNING id`
 
 	queryInsertMeetingParticipant = `
 		INSERT INTO meeting_participants (meeting_id, participant_id, position)
@@ -46,7 +47,7 @@ const (
 		WHERE m.id = $1`
 
 	queryGetAgendaItems = `
-		SELECT ai.text, p.id, p.last_name, p.first_name, p.middle_name, p.info
+		SELECT ai.id, ai.text, p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM agenda_items ai
 		JOIN participants p ON p.id = ai.speaker_id
 		WHERE ai.meeting_id = $1
@@ -62,6 +63,10 @@ const (
 	queryUpdateParticipantPosition = `
 		UPDATE meeting_participants SET position = $3
 		WHERE meeting_id = $1 AND participant_id = $2`
+
+	queryUpdateAgendaItemPosition = `
+		UPDATE agenda_items SET position = $2
+		WHERE id = $1 AND meeting_id = $3`
 )
 
 type repository struct {
@@ -138,7 +143,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	for aRows.Next() {
 		var item meeting.AgendaItem
 		var spk participant.Participant
-		if err := aRows.Scan(&item.Text, &spk.ID, &spk.LastName, &spk.FirstName, &spk.MiddleName, &spk.Info); err != nil {
+		if err := aRows.Scan(&item.ID, &item.Text, &spk.ID, &spk.LastName, &spk.FirstName, &spk.MiddleName, &spk.Info); err != nil {
 			return nil, err
 		}
 		item.Speaker = spk
@@ -188,6 +193,26 @@ func (r *repository) ReorderParticipants(ctx context.Context, meetingID string, 
 	return tx.Commit(ctx)
 }
 
+func (r *repository) ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "repo: reorder agenda items", zap.String("meeting_id", meetingID))
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for i, id := range agendaItemIDs {
+		if _, err := tx.Exec(ctx, queryUpdateAgendaItemPosition, id, i, meetingID); err != nil {
+			log.Error(ctx, "repo: failed to update agenda item position", zap.Error(err))
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.Meeting, error) {
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "repo: creating meeting", zap.String("title", m.Title))
@@ -205,8 +230,9 @@ func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.M
 		return nil, err
 	}
 
-	for i, item := range m.AgendaItems {
-		if _, err := tx.Exec(ctx, queryInsertAgendaItem, m.ID, i, item.Text, item.Speaker.ID); err != nil {
+	for i := range m.AgendaItems {
+		if err := tx.QueryRow(ctx, queryInsertAgendaItem, m.ID, i, m.AgendaItems[i].Text, m.AgendaItems[i].Speaker.ID).
+			Scan(&m.AgendaItems[i].ID); err != nil {
 			log.Error(ctx, "repo: failed to insert agenda item", zap.Error(err))
 			return nil, err
 		}

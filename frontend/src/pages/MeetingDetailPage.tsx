@@ -1,8 +1,41 @@
 import { useRef, useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getMeeting, downloadAgenda, downloadParticipants, reorderParticipants } from '../api/meetings'
-import type { Participant } from '../api/types'
+import { getMeeting, downloadAgenda, downloadParticipants, reorderParticipants, reorderAgendaItems } from '../api/meetings'
+import type { Participant, AgendaItem } from '../api/types'
+
+function useDragReorder<T>(
+  items: T[],
+  onDrop: (reordered: T[]) => void,
+) {
+  const dragIndex = useRef<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  function handleDragStart(i: number) { dragIndex.current = i }
+
+  function handleDragOver(e: React.DragEvent, i: number) {
+    e.preventDefault()
+    setDragOverIndex(i)
+  }
+
+  function handleDrop(i: number) {
+    const from = dragIndex.current
+    dragIndex.current = null
+    setDragOverIndex(null)
+    if (from === null || from === i) return
+    const next = [...items]
+    const [moved] = next.splice(from, 1)
+    next.splice(i, 0, moved)
+    onDrop(next)
+  }
+
+  function handleDragEnd() {
+    dragIndex.current = null
+    setDragOverIndex(null)
+  }
+
+  return { dragIndex, dragOverIndex, handleDragStart, handleDragOver, handleDrop, handleDragEnd }
+}
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -15,56 +48,37 @@ export function MeetingDetailPage() {
     enabled: !!id,
   })
 
-  // Local ordered copy of participants for optimistic DnD updates
+  const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
   const [participants, setParticipants] = useState<Participant[]>([])
+
   useEffect(() => {
-    if (meeting) setParticipants(meeting.participants)
+    if (meeting) {
+      setAgendaItems(meeting.agenda_items)
+      setParticipants(meeting.participants)
+    }
   }, [meeting])
 
-  const dragIndex = useRef<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
-
-  const reorderMutation = useMutation({
-    mutationFn: (ids: number[]) => reorderParticipants(id!, ids),
+  const agendaMutation = useMutation({
+    mutationFn: (ids: number[]) => reorderAgendaItems(id!, ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
-    onError: () => {
-      // Revert to server state on failure
-      if (meeting) setParticipants(meeting.participants)
-    },
+    onError: () => { if (meeting) setAgendaItems(meeting.agenda_items) },
   })
 
-  function handleDragStart(index: number) {
-    dragIndex.current = index
-  }
+  const participantsMutation = useMutation({
+    mutationFn: (ids: number[]) => reorderParticipants(id!, ids),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
+    onError: () => { if (meeting) setParticipants(meeting.participants) },
+  })
 
-  function handleDragOver(e: React.DragEvent, index: number) {
-    e.preventDefault()
-    setDragOverIndex(index)
-  }
+  const agendaDnd = useDragReorder(agendaItems, (reordered) => {
+    setAgendaItems(reordered)
+    agendaMutation.mutate(reordered.map(i => i.id))
+  })
 
-  function handleDrop(index: number) {
-    const from = dragIndex.current
-    if (from === null || from === index) {
-      dragIndex.current = null
-      setDragOverIndex(null)
-      return
-    }
-
-    const reordered = [...participants]
-    const [moved] = reordered.splice(from, 1)
-    reordered.splice(index, 0, moved)
-
+  const participantsDnd = useDragReorder(participants, (reordered) => {
     setParticipants(reordered)
-    dragIndex.current = null
-    setDragOverIndex(null)
-
-    reorderMutation.mutate(reordered.map(p => p.id))
-  }
-
-  function handleDragEnd() {
-    dragIndex.current = null
-    setDragOverIndex(null)
-  }
+    participantsMutation.mutate(reordered.map(p => p.id))
+  })
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('ru-RU', {
@@ -107,47 +121,74 @@ export function MeetingDetailPage() {
         </div>
       </div>
 
+      {/* Agenda items */}
       <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">Повестка</h2>
-        <div className="space-y-2">
-          {meeting.agenda_items.map((item, i) => (
-            <div key={i} className="bg-white border rounded-lg p-3">
-              <p className="text-sm font-medium">{i + 1}. {item.text}</p>
-              <p className="text-xs text-gray-500 mt-1">
-                Докладчик: {item.speaker.last_name} {item.speaker.first_name} {item.speaker.middle_name ?? ''}
-              </p>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700">
+            Повестка ({agendaItems.length})
+          </h2>
+          {agendaMutation.isPending && <span className="text-xs text-gray-400">Сохранение...</span>}
+          {agendaMutation.isError && <span className="text-xs text-red-500">Ошибка сохранения</span>}
+        </div>
+        <div className="space-y-1">
+          {agendaItems.map((item, i) => (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={() => agendaDnd.handleDragStart(i)}
+              onDragOver={(e) => agendaDnd.handleDragOver(e, i)}
+              onDrop={() => agendaDnd.handleDrop(i)}
+              onDragEnd={agendaDnd.handleDragEnd}
+              className={[
+                'bg-white border rounded-lg p-3 flex items-start gap-3 transition-opacity',
+                agendaDnd.dragOverIndex === i && agendaDnd.dragIndex.current !== i
+                  ? 'border-blue-400 bg-blue-50'
+                  : '',
+                agendaDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
+              ].join(' ')}
+            >
+              <span
+                className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing select-none text-lg leading-none mt-0.5"
+                title="Перетащить для изменения порядка"
+              >
+                ⠿
+              </span>
+              <span className="text-xs text-gray-400 w-5 shrink-0 mt-0.5">{i + 1}.</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{item.text}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Докладчик: {item.speaker.last_name} {item.speaker.first_name} {item.speaker.middle_name ?? ''}
+                </p>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
+      {/* Participants */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-gray-700">
             Участники ({participants.length})
           </h2>
-          {reorderMutation.isPending && (
-            <span className="text-xs text-gray-400">Сохранение...</span>
-          )}
-          {reorderMutation.isError && (
-            <span className="text-xs text-red-500">Ошибка сохранения</span>
-          )}
+          {participantsMutation.isPending && <span className="text-xs text-gray-400">Сохранение...</span>}
+          {participantsMutation.isError && <span className="text-xs text-red-500">Ошибка сохранения</span>}
         </div>
         <div className="space-y-1">
           {participants.map((p, i) => (
             <div
               key={p.id}
               draggable
-              onDragStart={() => handleDragStart(i)}
-              onDragOver={(e) => handleDragOver(e, i)}
-              onDrop={() => handleDrop(i)}
-              onDragEnd={handleDragEnd}
+              onDragStart={() => participantsDnd.handleDragStart(i)}
+              onDragOver={(e) => participantsDnd.handleDragOver(e, i)}
+              onDrop={() => participantsDnd.handleDrop(i)}
+              onDragEnd={participantsDnd.handleDragEnd}
               className={[
                 'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity',
-                dragOverIndex === i && dragIndex.current !== i
+                participantsDnd.dragOverIndex === i && participantsDnd.dragIndex.current !== i
                   ? 'border-blue-400 bg-blue-50'
                   : '',
-                dragIndex.current === i ? 'opacity-40' : 'opacity-100',
+                participantsDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
               ].join(' ')}
             >
               <span

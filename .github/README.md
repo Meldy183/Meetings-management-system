@@ -50,6 +50,7 @@ Browser (mobile web app)
 | `POST` | `/meetings` | Create a meeting record |
 | `GET` | `/meetings/{id}` | Get full meeting details |
 | `PUT` | `/meetings/{id}/participants/order` | Reorder participants within a meeting |
+| `PUT` | `/meetings/{id}/agenda/order` | Reorder agenda items within a meeting |
 | `GET` | `/meetings/{id}/export/agenda` | Export agenda as `.docx` |
 | `GET` | `/meetings/{id}/export/participants` | Export participant list as `.docx` |
 
@@ -65,7 +66,7 @@ See [`openapi.yaml`](../openapi.yaml) for the full specification.
 4. Add **agenda items** — each item has a text and a speaker picked from the participant list
 5. Submit ("Зафиксировать") → single `POST /meetings`
 
-After creation, participant order can be adjusted on the meeting detail page via drag-and-drop.
+After creation, both participant order and agenda item order can be adjusted on the meeting detail page via drag-and-drop.
 
 ---
 
