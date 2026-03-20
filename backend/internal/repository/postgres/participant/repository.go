@@ -14,19 +14,18 @@ import (
 	"meetings-editor/pkg/logger"
 )
 
+// pgx and errs are still used by Update, Delete, GetByIDs
+
 const (
 	queryCreate = `
 		INSERT INTO participants (last_name, first_name, middle_name, info)
 		VALUES ($1, $2, $3, $4)
 		RETURNING id`
 
-	queryFindByName = `
+	queryGetAll = `
 		SELECT id, last_name, first_name, middle_name, info
 		FROM participants
-		WHERE last_name = $1
-		  AND first_name = $2
-		  AND ($3 = '' OR middle_name = $3)
-		LIMIT 1`
+		ORDER BY last_name, first_name`
 
 	queryGetByIDs = `
 		SELECT id, last_name, first_name, middle_name, info
@@ -70,25 +69,26 @@ func (r *repository) Create(ctx context.Context, p *participant.Participant) (*p
 	return p, nil
 }
 
-func (r *repository) FindByName(ctx context.Context, lastName, firstName, middleName string) (*participant.Participant, error) {
+func (r *repository) GetAll(ctx context.Context) ([]participant.Participant, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: find participant by name",
-		zap.String("last_name", lastName),
-		zap.String("first_name", firstName),
-	)
+	log.Info(ctx, "repo: get all participants")
 
-	p := &participant.Participant{}
-	err := r.db.QueryRow(ctx, queryFindByName, lastName, firstName, middleName).
-		Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info)
+	rows, err := r.db.Query(ctx, queryGetAll)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, errs.ErrNotFound
-		}
-		log.Error(ctx, "repo: failed to find participant", zap.Error(err))
+		log.Error(ctx, "repo: failed to get all participants", zap.Error(err))
 		return nil, err
 	}
+	defer rows.Close()
 
-	return p, nil
+	var result []participant.Participant
+	for rows.Next() {
+		var p participant.Participant
+		if err := rows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
 }
 
 func (r *repository) GetByIDs(ctx context.Context, ids []int) ([]participant.Participant, error) {

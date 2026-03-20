@@ -10,8 +10,8 @@ import (
 )
 
 type Service interface {
+	GetAll(ctx context.Context) ([]participant.Participant, error)
 	Create(ctx context.Context, p *participant.Participant) (*participant.Participant, error)
-	FindByName(ctx context.Context, lastName, firstName, middleName string) (*participant.Participant, error)
 	Update(ctx context.Context, p *participant.Participant) (*participant.Participant, error)
 	Delete(ctx context.Context, id int) error
 }
@@ -33,13 +33,10 @@ func (s *service) Create(ctx context.Context, p *participant.Participant) (*part
 	return s.repo.Create(ctx, p)
 }
 
-func (s *service) FindByName(ctx context.Context, lastName, firstName, middleName string) (*participant.Participant, error) {
+func (s *service) GetAll(ctx context.Context) ([]participant.Participant, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "service: find participant by name",
-		zap.String("last_name", lastName),
-		zap.String("first_name", firstName),
-	)
-	return s.repo.FindByName(ctx, lastName, firstName, middleName)
+	log.Info(ctx, "service: get all participants")
+	return s.repo.GetAll(ctx)
 }
 
 func (s *service) Update(ctx context.Context, p *participant.Participant) (*participant.Participant, error) {

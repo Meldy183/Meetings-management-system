@@ -12,6 +12,7 @@ import (
 	"meetings-editor/pkg/errs"
 )
 
+
 type ParticipantHandler struct {
 	svc svcParticipant.Service
 }
@@ -20,28 +21,19 @@ func NewParticipantHandler(svc svcParticipant.Service) *ParticipantHandler {
 	return &ParticipantHandler{svc: svc}
 }
 
-// GET /participants?last_name=&first_name=&middle_name=
-func (h *ParticipantHandler) Search(w http.ResponseWriter, r *http.Request) {
-	lastName := r.URL.Query().Get("last_name")
-	firstName := r.URL.Query().Get("first_name")
-	middleName := r.URL.Query().Get("middle_name")
-
-	if lastName == "" || firstName == "" {
-		respondError(w, http.StatusBadRequest, "last_name and first_name are required", nil)
-		return
-	}
-
-	p, err := h.svc.FindByName(r.Context(), lastName, firstName, middleName)
+// GET /participants
+func (h *ParticipantHandler) List(w http.ResponseWriter, r *http.Request) {
+	participants, err := h.svc.GetAll(r.Context())
 	if err != nil {
-		if errors.Is(err, errs.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "participant not found", nil)
-			return
-		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
 
-	respond(w, http.StatusOK, toParticipantResponse(p))
+	resp := make([]model.ParticipantResponse, 0, len(participants))
+	for i := range participants {
+		resp = append(resp, toParticipantResponse(&participants[i]))
+	}
+	respond(w, http.StatusOK, resp)
 }
 
 // POST /participants

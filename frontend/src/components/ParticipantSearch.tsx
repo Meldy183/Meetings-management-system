@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import { useForm } from 'react-hook-form'
-import { searchParticipant, createParticipant } from '../api/participants'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getParticipants, createParticipant } from '../api/participants'
 import { ApiError } from '../api/client'
 import { ParticipantForm } from './ParticipantForm'
 import type { Participant, ParticipantCreate } from '../api/types'
 
-interface SearchFields {
-  last_name: string
-  first_name: string
-  middle_name: string
+function filterParticipants(list: Participant[], query: string): Participant[] {
+  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return []
+  return list.filter(p => {
+    const full = [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ').toLowerCase()
+    return words.every(w => full.includes(w))
+  })
 }
 
 interface Props {
@@ -17,152 +20,114 @@ interface Props {
 }
 
 export function ParticipantSearch({ onAdd, existingIds }: Props) {
-  const [found, setFound] = useState<Participant | null>(null)
-  const [notFound, setNotFound] = useState(false)
+  const queryClient = useQueryClient()
+  const [query, setQuery] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
-  const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [createError, setCreateError] = useState<string | null>(null)
 
-  const { register, handleSubmit, getValues } = useForm<SearchFields>()
+  const { data: all = [] } = useQuery({
+    queryKey: ['participants'],
+    queryFn: getParticipants,
+  })
 
-  async function onSearch(data: SearchFields) {
-    setSearching(true)
-    setFound(null)
-    setNotFound(false)
-    setShowCreateForm(false)
-    setError(null)
-    try {
-      const participant = await searchParticipant(data.last_name, data.first_name, data.middle_name || undefined)
-      setFound(participant)
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 404) {
-        setNotFound(true)
-      } else {
-        setError('Ошибка поиска')
-      }
-    } finally {
-      setSearching(false)
-    }
-  }
+  const results = filterParticipants(all, query)
+  const hasQuery = query.trim().length > 0
+  const noResults = hasQuery && results.length === 0
 
   async function onCreate(data: ParticipantCreate) {
     setCreating(true)
+    setCreateError(null)
     try {
-      const participant = await createParticipant(data)
-      onAdd(participant)
+      const p = await createParticipant(data)
+      queryClient.invalidateQueries({ queryKey: ['participants'] })
+      onAdd(p)
       setShowCreateForm(false)
-      setNotFound(false)
-      setFound(null)
+      setQuery('')
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
-        setError('Участник с таким именем уже существует')
+        setCreateError('Участник с таким именем уже существует')
       } else {
-        setError('Ошибка создания')
+        setCreateError('Ошибка создания')
       }
     } finally {
       setCreating(false)
     }
   }
 
-  const alreadyAdded = found ? existingIds.includes(found.id) : false
-  const values = getValues()
-  const prefillData: Partial<ParticipantCreate> = {
-    last_name: values.last_name,
-    first_name: values.first_name,
-    middle_name: values.middle_name,
-  }
-
   return (
-    <div className="space-y-3">
-      <form onSubmit={handleSubmit(onSearch)} className="space-y-2">
-        <div className="grid grid-cols-3 gap-2">
-          <div>
-            <input
-              {...register('last_name', { required: true })}
-              placeholder="Фамилия *"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <input
-              {...register('first_name', { required: true })}
-              placeholder="Имя *"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <input
-              {...register('middle_name')}
-              placeholder="Отчество"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="submit"
-            disabled={searching}
-            className="bg-gray-100 border text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50"
-          >
-            {searching ? 'Поиск...' : 'Найти'}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setShowCreateForm(v => !v); setFound(null); setNotFound(false); setError(null) }}
-            className="text-blue-600 text-sm px-2 py-2 hover:underline"
-          >
-            + Новый участник
-          </button>
-        </div>
-      </form>
+    <div className="space-y-2">
+      <input
+        value={query}
+        onChange={e => { setQuery(e.target.value); setShowCreateForm(false); setCreateError(null) }}
+        placeholder="Поиск по имени..."
+        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
-
-      {found && (
-        <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">
-              {found.last_name} {found.first_name} {found.middle_name}
-            </p>
-            {found.info && <p className="text-xs text-gray-500">{found.info}</p>}
-          </div>
-          {alreadyAdded ? (
-            <span className="text-xs text-gray-500">Уже добавлен</span>
-          ) : (
-            <button
-              onClick={() => { onAdd(found); setFound(null) }}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700"
-            >
-              Добавить
-            </button>
-          )}
+      {/* Results */}
+      {hasQuery && !showCreateForm && results.length > 0 && (
+        <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
+          {results.map(p => {
+            const added = existingIds.includes(p.id)
+            return (
+              <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {p.last_name} {p.first_name} {p.middle_name ?? ''}
+                  </p>
+                  {p.info && <p className="text-xs text-gray-500 truncate">{p.info}</p>}
+                </div>
+                {added ? (
+                  <span className="text-xs text-gray-400 shrink-0 ml-3">Уже добавлен</span>
+                ) : (
+                  <button
+                    onClick={() => { onAdd(p); setQuery('') }}
+                    className="shrink-0 ml-3 bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-700"
+                  >
+                    Добавить
+                  </button>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {notFound && !showCreateForm && (
+      {/* Not found */}
+      {noResults && !showCreateForm && (
         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <p className="text-sm text-yellow-800">Участник не найден.</p>
+          <p className="text-sm text-yellow-800">Никого не найдено.</p>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="mt-2 text-sm text-blue-600 hover:underline"
+            className="mt-1 text-sm text-blue-600 hover:underline"
           >
             Добавить в базу данных
           </button>
         </div>
       )}
 
+      {/* Create form */}
       {showCreateForm && (
         <div className="p-4 border rounded-lg bg-gray-50">
           <p className="text-sm font-medium text-gray-700 mb-3">Новый участник</p>
+          {createError && <p className="text-sm text-red-500 mb-2">{createError}</p>}
           <ParticipantForm
-            defaultValues={prefillData}
             onSubmit={onCreate}
-            onCancel={() => setShowCreateForm(false)}
+            onCancel={() => { setShowCreateForm(false); setCreateError(null) }}
             submitLabel="Создать и добавить"
             isLoading={creating}
           />
         </div>
+      )}
+
+      {/* Always-visible add button when no query */}
+      {!hasQuery && !showCreateForm && (
+        <button
+          onClick={() => setShowCreateForm(true)}
+          className="text-sm text-blue-600 hover:underline"
+        >
+          + Новый участник
+        </button>
       )}
     </div>
   )

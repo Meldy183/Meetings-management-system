@@ -70,7 +70,7 @@ func main() {
 		fmt.Fprintln(w, "ok")
 	})
 
-	mux.HandleFunc("GET /participants", ph.Search)
+	mux.HandleFunc("GET /participants", ph.List)
 	mux.HandleFunc("POST /participants", ph.Create)
 	mux.HandleFunc("PUT /participants/{id}", ph.Update)
 	mux.HandleFunc("DELETE /participants/{id}", ph.Delete)

@@ -22,49 +22,31 @@ paths:
     get:
       tags:
         - participants
-      summary: Search participant by full name
+      summary: List all participants
       description: >
-        Searches the database for a participant matching the provided name parts.
-        The frontend uses this endpoint to verify a person exists before adding
-        them to a meeting. Returns the first matching participant or 404.
-      parameters:
-        - name: last_name
-          in: query
-          required: true
-          schema:
-            type: string
-          example: Иванов
-        - name: first_name
-          in: query
-          required: true
-          schema:
-            type: string
-          example: Иван
-        - name: middle_name
-          in: query
-          required: false
-          schema:
-            type: string
-          example: Иванович
+        Returns all participants ordered by last_name, first_name.
+        Filtering is performed client-side using word-by-word partial
+        matching against the full name string.
       responses:
         '200':
-          description: Participant found
+          description: List of all participants
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Participant'
+                type: array
+                items:
+                  $ref: '#/components/schemas/Participant'
               example:
-                id: 42
-                last_name: Иванов
-                first_name: Иван
-                middle_name: Иванович
-                info: Руководитель отдела
-        '404':
-          description: Participant not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorNotFound'
+                - id: 42
+                  last_name: Иванов
+                  first_name: Иван
+                  middle_name: Иванович
+                  info: Руководитель отдела
+                - id: 43
+                  last_name: Петров
+                  first_name: Пётр
+                  middle_name: null
+                  info: null
 
     post:
       tags:
