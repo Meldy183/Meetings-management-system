@@ -78,6 +78,7 @@ func main() {
 	mux.HandleFunc("GET /meetings", mh.List)
 	mux.HandleFunc("POST /meetings", mh.Create)
 	mux.HandleFunc("GET /meetings/{id}", mh.GetByID)
+	mux.HandleFunc("PUT /meetings/{id}/participants/order", mh.ReorderParticipants)
 	mux.HandleFunc("GET /meetings/{id}/export/agenda", mh.ExportAgenda)
 	mux.HandleFunc("GET /meetings/{id}/export/participants", mh.ExportParticipants)
 

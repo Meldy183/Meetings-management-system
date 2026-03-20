@@ -58,6 +58,10 @@ const (
 		JOIN participants p ON p.id = mp.participant_id
 		WHERE mp.meeting_id = $1
 		ORDER BY mp.position`
+
+	queryUpdateParticipantPosition = `
+		UPDATE meeting_participants SET position = $3
+		WHERE meeting_id = $1 AND participant_id = $2`
 )
 
 type repository struct {
@@ -162,6 +166,26 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	}
 
 	return &m, nil
+}
+
+func (r *repository) ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "repo: reorder participants", zap.String("meeting_id", meetingID))
+
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for i, pid := range participantIDs {
+		if _, err := tx.Exec(ctx, queryUpdateParticipantPosition, meetingID, pid, i); err != nil {
+			log.Error(ctx, "repo: failed to update participant position", zap.Error(err))
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.Meeting, error) {

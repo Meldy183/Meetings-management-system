@@ -33,10 +33,18 @@ type ErrInvalidIDs struct {
 
 func (e *ErrInvalidIDs) Error() string { return "one or more participant IDs not found" }
 
+// ErrParticipantSetMismatch is returned when the provided IDs don't match the meeting's participants.
+type ErrParticipantSetMismatch struct{}
+
+func (e *ErrParticipantSetMismatch) Error() string {
+	return "participant IDs must exactly match the meeting's current participants"
+}
+
 type Service interface {
 	GetAll(ctx context.Context, limit, offset int) ([]domMeeting.Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*domMeeting.Meeting, error)
 	Create(ctx context.Context, req *CreateRequest) (*domMeeting.Meeting, error)
+	ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error
 }
 
 type service struct {
@@ -115,4 +123,30 @@ func (s *service) Create(ctx context.Context, req *CreateRequest) (*domMeeting.M
 	}
 
 	return s.repo.Create(ctx, m)
+}
+
+func (s *service) ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "service: reorder participants", zap.String("meeting_id", meetingID))
+
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return err
+	}
+
+	// Validate that provided IDs exactly match the meeting's current participant set.
+	if len(participantIDs) != len(m.Participants) {
+		return &ErrParticipantSetMismatch{}
+	}
+	existing := make(map[int]struct{}, len(m.Participants))
+	for _, p := range m.Participants {
+		existing[p.ID] = struct{}{}
+	}
+	for _, id := range participantIDs {
+		if _, ok := existing[id]; !ok {
+			return &ErrParticipantSetMismatch{}
+		}
+	}
+
+	return s.repo.ReorderParticipants(ctx, meetingID, participantIDs)
 }

@@ -23,6 +23,13 @@ export async function downloadParticipants(id: string): Promise<void> {
   triggerDownload(blob, filename)
 }
 
+export function reorderParticipants(meetingId: string, participantIds: number[]): Promise<void> {
+  return apiFetch<void>(`/meetings/${meetingId}/participants/order`, {
+    method: 'PUT',
+    body: JSON.stringify({ participant_ids: participantIds }),
+  })
+}
+
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
