@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getMeeting, downloadAgenda, downloadParticipants } from '../api/meetings'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { getMeeting, downloadAgenda, downloadParticipants, reorderParticipants } from '../api/meetings'
+import type { Participant } from '../api/types'
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const queryClient = useQueryClient()
   const [downloading, setDownloading] = useState<'agenda' | 'participants' | null>(null)
 
   const { data: meeting, isLoading, isError } = useQuery({
@@ -13,8 +15,62 @@ export function MeetingDetailPage() {
     enabled: !!id,
   })
 
+  // Local ordered copy of participants for optimistic DnD updates
+  const [participants, setParticipants] = useState<Participant[]>([])
+  useEffect(() => {
+    if (meeting) setParticipants(meeting.participants)
+  }, [meeting])
+
+  const dragIndex = useRef<number | null>(null)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const reorderMutation = useMutation({
+    mutationFn: (ids: number[]) => reorderParticipants(id!, ids),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
+    onError: () => {
+      // Revert to server state on failure
+      if (meeting) setParticipants(meeting.participants)
+    },
+  })
+
+  function handleDragStart(index: number) {
+    dragIndex.current = index
+  }
+
+  function handleDragOver(e: React.DragEvent, index: number) {
+    e.preventDefault()
+    setDragOverIndex(index)
+  }
+
+  function handleDrop(index: number) {
+    const from = dragIndex.current
+    if (from === null || from === index) {
+      dragIndex.current = null
+      setDragOverIndex(null)
+      return
+    }
+
+    const reordered = [...participants]
+    const [moved] = reordered.splice(from, 1)
+    reordered.splice(index, 0, moved)
+
+    setParticipants(reordered)
+    dragIndex.current = null
+    setDragOverIndex(null)
+
+    reorderMutation.mutate(reordered.map(p => p.id))
+  }
+
+  function handleDragEnd() {
+    dragIndex.current = null
+    setDragOverIndex(null)
+  }
+
   function formatDate(iso: string) {
-    return new Date(iso).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleString('ru-RU', {
+      day: 'numeric', month: 'long', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
   }
 
   async function handleDownload(type: 'agenda' | 'participants') {
@@ -66,16 +122,47 @@ export function MeetingDetailPage() {
       </div>
 
       <div>
-        <h2 className="text-sm font-semibold text-gray-700 mb-2">
-          Участники ({meeting.participants.length})
-        </h2>
-        <div className="space-y-2">
-          {meeting.participants.map(p => (
-            <div key={p.id} className="bg-white border rounded-lg p-3">
-              <p className="text-sm font-medium">
-                {p.last_name} {p.first_name} {p.middle_name ?? ''}
-              </p>
-              {p.info && <p className="text-xs text-gray-500 mt-0.5">{p.info}</p>}
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700">
+            Участники ({participants.length})
+          </h2>
+          {reorderMutation.isPending && (
+            <span className="text-xs text-gray-400">Сохранение...</span>
+          )}
+          {reorderMutation.isError && (
+            <span className="text-xs text-red-500">Ошибка сохранения</span>
+          )}
+        </div>
+        <div className="space-y-1">
+          {participants.map((p, i) => (
+            <div
+              key={p.id}
+              draggable
+              onDragStart={() => handleDragStart(i)}
+              onDragOver={(e) => handleDragOver(e, i)}
+              onDrop={() => handleDrop(i)}
+              onDragEnd={handleDragEnd}
+              className={[
+                'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity',
+                dragOverIndex === i && dragIndex.current !== i
+                  ? 'border-blue-400 bg-blue-50'
+                  : '',
+                dragIndex.current === i ? 'opacity-40' : 'opacity-100',
+              ].join(' ')}
+            >
+              <span
+                className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing select-none text-lg leading-none"
+                title="Перетащить для изменения порядка"
+              >
+                ⠿
+              </span>
+              <span className="text-xs text-gray-400 w-5 shrink-0">{i + 1}.</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">
+                  {p.last_name} {p.first_name} {p.middle_name ?? ''}
+                </p>
+                {p.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{p.info}</p>}
+              </div>
             </div>
           ))}
         </div>

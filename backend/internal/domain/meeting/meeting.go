@@ -24,4 +24,5 @@ type Repository interface {
 	GetAll(ctx context.Context, limit, offset int) ([]Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*Meeting, error)
 	Create(ctx context.Context, m *Meeting) (*Meeting, error)
+	ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error
 }

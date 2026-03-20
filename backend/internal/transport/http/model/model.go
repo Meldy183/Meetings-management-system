@@ -57,6 +57,10 @@ type MeetingListResponse struct {
 	Offset int                      `json:"offset"`
 	Items  []MeetingSummaryResponse `json:"items"`
 }
+type ReorderParticipantsRequest struct {
+	ParticipantIDs []int `json:"participant_ids"`
+}
+
 type ErrorResponse struct {
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
