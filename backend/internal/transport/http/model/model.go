@@ -43,11 +43,19 @@ type MeetingResponse struct {
 	Participants []ParticipantResponse `json:"participants"`
 	CreatedAt    time.Time             `json:"created_at"`
 }
+type MeetingSummaryResponse struct {
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	Date        time.Time          `json:"date"`
+	Chairperson ParticipantResponse `json:"chairperson"`
+	CreatedAt   time.Time          `json:"created_at"`
+}
+
 type MeetingListResponse struct {
-	Total  int               `json:"total"`
-	Limit  int               `json:"limit"`
-	Offset int               `json:"offset"`
-	Items  []MeetingResponse `json:"items"`
+	Total  int                      `json:"total"`
+	Limit  int                      `json:"limit"`
+	Offset int                      `json:"offset"`
+	Items  []MeetingSummaryResponse `json:"items"`
 }
 type ErrorResponse struct {
 	Message string      `json:"message"`

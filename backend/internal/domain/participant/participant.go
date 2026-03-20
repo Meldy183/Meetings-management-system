@@ -12,6 +12,8 @@ type Participant struct {
 
 type Repository interface {
 	Create(ctx context.Context, p *Participant) (*Participant, error)
-	FindByName(lastName, firstName, middleName string) (*Participant, error)
-	GetByIDs(ids []int) ([]Participant, error)
+	FindByName(ctx context.Context, lastName, firstName, middleName string) (*Participant, error)
+	GetByIDs(ctx context.Context, ids []int) ([]Participant, error)
+	Update(ctx context.Context, p *Participant) (*Participant, error)
+	Delete(ctx context.Context, id int) error
 }
