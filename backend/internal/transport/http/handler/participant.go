@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"meetings-editor/internal/domain/participant"
 	svcParticipant "meetings-editor/internal/service/participant"
@@ -21,9 +22,17 @@ func NewParticipantHandler(svc svcParticipant.Service) *ParticipantHandler {
 	return &ParticipantHandler{svc: svc}
 }
 
-// GET /participants
+// GET /participants?q=...
 func (h *ParticipantHandler) List(w http.ResponseWriter, r *http.Request) {
-	participants, err := h.svc.GetAll(r.Context())
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	var participants []participant.Participant
+	var err error
+	if q == "" {
+		participants, err = h.svc.GetAll(r.Context())
+	} else {
+		participants, err = h.svc.Search(r.Context(), q)
+	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return

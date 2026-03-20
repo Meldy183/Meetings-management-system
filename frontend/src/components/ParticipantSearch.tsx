@@ -1,18 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { getParticipants, createParticipant } from '../api/participants'
 import { ApiError } from '../api/client'
 import { ParticipantForm } from './ParticipantForm'
 import type { Participant, ParticipantCreate } from '../api/types'
-
-function filterParticipants(list: Participant[], query: string): Participant[] {
-  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return []
-  return list.filter(p => {
-    const full = [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ').toLowerCase()
-    return words.every(w => full.includes(w))
-  })
-}
 
 interface Props {
   onAdd: (participant: Participant) => void
@@ -22,18 +13,25 @@ interface Props {
 export function ParticipantSearch({ onAdd, existingIds }: Props) {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
 
-  const { data: all = [] } = useQuery({
-    queryKey: ['participants'],
-    queryFn: getParticipants,
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300)
+    return () => clearTimeout(t)
+  }, [query])
+
+  const hasQuery = query.trim().length > 0
+
+  const { data: results = [], isFetching } = useQuery({
+    queryKey: ['participants', 'search', debouncedQuery],
+    queryFn: () => getParticipants(debouncedQuery),
+    enabled: debouncedQuery.trim().length > 0,
   })
 
-  const results = filterParticipants(all, query)
-  const hasQuery = query.trim().length > 0
-  const noResults = hasQuery && results.length === 0
+  const noResults = debouncedQuery.trim().length > 0 && !isFetching && results.length === 0
 
   async function onCreate(data: ParticipantCreate) {
     setCreating(true)

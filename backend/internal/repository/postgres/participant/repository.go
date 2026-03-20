@@ -3,6 +3,8 @@ package participant
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -76,6 +78,41 @@ func (r *repository) GetAll(ctx context.Context) ([]participant.Participant, err
 	rows, err := r.db.Query(ctx, queryGetAll)
 	if err != nil {
 		log.Error(ctx, "repo: failed to get all participants", zap.Error(err))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []participant.Participant
+	for rows.Next() {
+		var p participant.Participant
+		if err := rows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
+func (r *repository) Search(ctx context.Context, words []string) ([]participant.Participant, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "repo: search participants", zap.Int("words", len(words)))
+
+	var sb strings.Builder
+	sb.WriteString(`SELECT id, last_name, first_name, middle_name, info FROM participants WHERE `)
+	args := make([]interface{}, len(words))
+	for i, w := range words {
+		if i > 0 {
+			sb.WriteString(" AND ")
+		}
+		sb.WriteString(fmt.Sprintf(
+			`lower(last_name || ' ' || first_name || ' ' || middle_name) LIKE '%%' || lower($%d) || '%%'`, i+1))
+		args[i] = w
+	}
+	sb.WriteString(` ORDER BY last_name, first_name LIMIT 100`)
+
+	rows, err := r.db.Query(ctx, sb.String(), args...)
+	if err != nil {
+		log.Error(ctx, "repo: failed to search participants", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()

@@ -2,6 +2,7 @@ package participant
 
 import (
 	"context"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -11,6 +12,7 @@ import (
 
 type Service interface {
 	GetAll(ctx context.Context) ([]participant.Participant, error)
+	Search(ctx context.Context, q string) ([]participant.Participant, error)
 	Create(ctx context.Context, p *participant.Participant) (*participant.Participant, error)
 	Update(ctx context.Context, p *participant.Participant) (*participant.Participant, error)
 	Delete(ctx context.Context, id int) error
@@ -24,6 +26,22 @@ func New(repo participant.Repository) Service {
 	return &service{repo: repo}
 }
 
+func (s *service) GetAll(ctx context.Context) ([]participant.Participant, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "service: get all participants")
+	return s.repo.GetAll(ctx)
+}
+
+func (s *service) Search(ctx context.Context, q string) ([]participant.Participant, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "service: search participants", zap.String("q", q))
+	words := strings.Fields(strings.ToLower(strings.TrimSpace(q)))
+	if len(words) == 0 {
+		return s.repo.GetAll(ctx)
+	}
+	return s.repo.Search(ctx, words)
+}
+
 func (s *service) Create(ctx context.Context, p *participant.Participant) (*participant.Participant, error) {
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "service: creating participant",
@@ -31,12 +49,6 @@ func (s *service) Create(ctx context.Context, p *participant.Participant) (*part
 		zap.String("first_name", p.FirstName),
 	)
 	return s.repo.Create(ctx, p)
-}
-
-func (s *service) GetAll(ctx context.Context) ([]participant.Participant, error) {
-	log := logger.FromContext(ctx)
-	log.Info(ctx, "service: get all participants")
-	return s.repo.GetAll(ctx)
 }
 
 func (s *service) Update(ctx context.Context, p *participant.Participant) (*participant.Participant, error) {

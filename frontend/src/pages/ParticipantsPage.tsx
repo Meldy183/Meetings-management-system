@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getParticipants, createParticipant, updateParticipant, deleteParticipant } from '../api/participants'
@@ -6,27 +6,22 @@ import { ApiError } from '../api/client'
 import { ParticipantForm } from '../components/ParticipantForm'
 import type { Participant, ParticipantCreate } from '../api/types'
 
-function filterParticipants(list: Participant[], query: string): Participant[] {
-  const words = query.toLowerCase().trim().split(/\s+/).filter(Boolean)
-  if (words.length === 0) return list
-  return list.filter(p => {
-    const full = [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ').toLowerCase()
-    return words.every(w => full.includes(w))
-  })
-}
-
 export function ParticipantsPage() {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
 
-  const { data: all = [], isLoading, isError } = useQuery({
-    queryKey: ['participants'],
-    queryFn: getParticipants,
-  })
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 300)
+    return () => clearTimeout(t)
+  }, [query])
 
-  const filtered = filterParticipants(all, query)
+  const { data: all = [], isLoading, isError } = useQuery({
+    queryKey: ['participants', debouncedQuery],
+    queryFn: () => getParticipants(debouncedQuery || undefined),
+  })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: ParticipantCreate }) => updateParticipant(id, data),
@@ -70,7 +65,6 @@ export function ParticipantsPage() {
         <h1 className="text-xl font-semibold text-gray-900">Участники</h1>
       </div>
 
-      {/* Search */}
       <input
         value={query}
         onChange={e => setQuery(e.target.value)}
@@ -78,18 +72,17 @@ export function ParticipantsPage() {
         className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
 
-      {/* List */}
       {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
       {isError && <p className="text-sm text-red-500">Ошибка загрузки</p>}
 
       {!isLoading && !isError && (
         <div className="space-y-2">
-          {filtered.length === 0 && (
+          {all.length === 0 && (
             <p className="text-sm text-gray-400 py-4 text-center">
               {query ? 'Никого не найдено' : 'Список пуст'}
             </p>
           )}
-          {filtered.map(p => (
+          {all.map((p: Participant) => (
             <div key={p.id}>
               {editingId === p.id ? (
                 <div className="p-4 border rounded-lg bg-gray-50">
@@ -129,7 +122,6 @@ export function ParticipantsPage() {
         </div>
       )}
 
-      {/* Add new */}
       {!showAddForm ? (
         <button
           onClick={() => setShowAddForm(true)}

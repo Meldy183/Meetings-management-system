@@ -1,8 +1,9 @@
 import { apiFetch } from './client'
 import type { Participant, ParticipantCreate } from './types'
 
-export function getParticipants(): Promise<Participant[]> {
-  return apiFetch<Participant[]>('/participants')
+export function getParticipants(q?: string): Promise<Participant[]> {
+  const url = q ? `/participants?q=${encodeURIComponent(q)}` : '/participants'
+  return apiFetch<Participant[]>(url)
 }
 
 export function createParticipant(data: ParticipantCreate): Promise<Participant> {

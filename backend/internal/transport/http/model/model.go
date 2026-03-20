@@ -66,6 +66,21 @@ type ReorderAgendaItemsRequest struct {
 	AgendaItemIDs []int `json:"agenda_item_ids"`
 }
 
+type MeetingUpdateRequest struct {
+	Title         string    `json:"title"`
+	Date          time.Time `json:"date"`
+	ChairpersonID int       `json:"chairperson_id"`
+}
+
+type AddMeetingParticipantRequest struct {
+	ParticipantID int `json:"participant_id"`
+}
+
+type AgendaItemUpsertRequest struct {
+	Text      string `json:"text"`
+	SpeakerID int    `json:"speaker_id"`
+}
+
 type ErrorResponse struct {
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`

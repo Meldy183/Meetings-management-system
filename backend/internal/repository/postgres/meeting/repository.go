@@ -3,6 +3,7 @@ package meeting
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,6 +68,34 @@ const (
 	queryUpdateAgendaItemPosition = `
 		UPDATE agenda_items SET position = $2
 		WHERE id = $1 AND meeting_id = $3`
+
+	queryUpdateMeeting = `
+		UPDATE meetings SET title = $2, date = $3, chairperson_id = $4
+		WHERE id = $1`
+
+	queryDeleteMeeting = `DELETE FROM meetings WHERE id = $1`
+
+	queryAddMeetingParticipant = `
+		INSERT INTO meeting_participants (meeting_id, participant_id, position)
+		VALUES ($1, $2,
+		  (SELECT COALESCE(MAX(position), -1) + 1 FROM meeting_participants WHERE meeting_id = $1))`
+
+	queryRemoveMeetingParticipant = `
+		DELETE FROM meeting_participants WHERE meeting_id = $1 AND participant_id = $2`
+
+	queryAddAgendaItem = `
+		INSERT INTO agenda_items (meeting_id, position, text, speaker_id)
+		VALUES ($1,
+		  (SELECT COALESCE(MAX(position), -1) + 1 FROM agenda_items WHERE meeting_id = $1),
+		  $2, $3)
+		RETURNING id`
+
+	queryUpdateAgendaItem = `
+		UPDATE agenda_items SET text = $3, speaker_id = $4
+		WHERE id = $1 AND meeting_id = $2`
+
+	queryDeleteAgendaItem = `
+		DELETE FROM agenda_items WHERE id = $1 AND meeting_id = $2`
 )
 
 type repository struct {
@@ -211,6 +240,72 @@ func (r *repository) ReorderAgendaItems(ctx context.Context, meetingID string, a
 	}
 
 	return tx.Commit(ctx)
+}
+
+func (r *repository) Update(ctx context.Context, id string, title string, date time.Time, chairpersonID int) error {
+	tag, err := r.db.Exec(ctx, queryUpdateMeeting, id, title, date, chairpersonID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) Delete(ctx context.Context, id string) error {
+	tag, err := r.db.Exec(ctx, queryDeleteMeeting, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) AddParticipant(ctx context.Context, meetingID string, participantID int) error {
+	_, err := r.db.Exec(ctx, queryAddMeetingParticipant, meetingID, participantID)
+	return err
+}
+
+func (r *repository) RemoveParticipant(ctx context.Context, meetingID string, participantID int) error {
+	tag, err := r.db.Exec(ctx, queryRemoveMeetingParticipant, meetingID, participantID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (int, error) {
+	var id int
+	err := r.db.QueryRow(ctx, queryAddAgendaItem, meetingID, text, speakerID).Scan(&id)
+	return id, err
+}
+
+func (r *repository) UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) error {
+	tag, err := r.db.Exec(ctx, queryUpdateAgendaItem, itemID, meetingID, text, speakerID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) error {
+	tag, err := r.db.Exec(ctx, queryDeleteAgendaItem, itemID, meetingID)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.Meeting, error) {

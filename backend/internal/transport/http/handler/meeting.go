@@ -125,6 +125,226 @@ func (h *MeetingHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
+// PUT /meetings/{id}
+func (h *MeetingHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	var req model.MeetingUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	if req.Title == "" || req.Date.IsZero() || req.ChairpersonID == 0 {
+		respondError(w, http.StatusBadRequest, "title, date and chairperson_id are required", nil)
+		return
+	}
+
+	m, err := h.svc.Update(r.Context(), id, &svcMeeting.UpdateRequest{
+		Title:         req.Title,
+		Date:          req.Date,
+		ChairpersonID: req.ChairpersonID,
+	})
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		var e *svcMeeting.ErrChairpersonNotInMeeting
+		if errors.As(err, &e) {
+			respondError(w, http.StatusUnprocessableEntity, e.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// DELETE /meetings/{id}
+func (h *MeetingHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	if err := h.svc.Delete(r.Context(), id); err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /meetings/{id}/participants
+func (h *MeetingHandler) AddParticipant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	var req model.AddMeetingParticipantRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ParticipantID == 0 {
+		respondError(w, http.StatusBadRequest, "participant_id is required", nil)
+		return
+	}
+
+	m, err := h.svc.AddParticipant(r.Context(), id, req.ParticipantID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		var e1 *svcMeeting.ErrInvalidIDs
+		if errors.As(err, &e1) {
+			respondError(w, http.StatusUnprocessableEntity, "participant not found", nil)
+			return
+		}
+		var e2 *svcMeeting.ErrParticipantAlreadyInMeeting
+		if errors.As(err, &e2) {
+			respondError(w, http.StatusConflict, e2.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// DELETE /meetings/{id}/participants/{pid}
+func (h *MeetingHandler) RemoveParticipant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pidStr := r.PathValue("pid")
+	pid, err := strconv.Atoi(pidStr)
+	if id == "" || err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	m, err := h.svc.RemoveParticipant(r.Context(), id, pid)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting or participant not found", nil)
+			return
+		}
+		var e1 *svcMeeting.ErrChairpersonRemoval
+		if errors.As(err, &e1) {
+			respondError(w, http.StatusConflict, e1.Error(), nil)
+			return
+		}
+		var e2 *svcMeeting.ErrSpeakerRemoval
+		if errors.As(err, &e2) {
+			respondError(w, http.StatusConflict, e2.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// POST /meetings/{id}/agenda
+func (h *MeetingHandler) AddAgendaItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	var req model.AgendaItemUpsertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	if req.Text == "" || req.SpeakerID == 0 {
+		respondError(w, http.StatusBadRequest, "text and speaker_id are required", nil)
+		return
+	}
+
+	m, err := h.svc.AddAgendaItem(r.Context(), id, req.Text, req.SpeakerID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		var e *svcMeeting.ErrSpeakerNotInMeeting
+		if errors.As(err, &e) {
+			respondError(w, http.StatusUnprocessableEntity, e.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusCreated, toMeetingResponse(m))
+}
+
+// PUT /meetings/{id}/agenda/{item_id}
+func (h *MeetingHandler) UpdateAgendaItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	itemIDStr := r.PathValue("item_id")
+	itemID, err := strconv.Atoi(itemIDStr)
+	if id == "" || err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	var req model.AgendaItemUpsertRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	if req.Text == "" || req.SpeakerID == 0 {
+		respondError(w, http.StatusBadRequest, "text and speaker_id are required", nil)
+		return
+	}
+
+	m, err := h.svc.UpdateAgendaItem(r.Context(), id, itemID, req.Text, req.SpeakerID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
+			return
+		}
+		var e *svcMeeting.ErrSpeakerNotInMeeting
+		if errors.As(err, &e) {
+			respondError(w, http.StatusUnprocessableEntity, e.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// DELETE /meetings/{id}/agenda/{item_id}
+func (h *MeetingHandler) DeleteAgendaItem(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	itemIDStr := r.PathValue("item_id")
+	itemID, err := strconv.Atoi(itemIDStr)
+	if id == "" || err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	m, err := h.svc.DeleteAgendaItem(r.Context(), id, itemID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
 // PUT /meetings/{id}/participants/order
 func (h *MeetingHandler) ReorderParticipants(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

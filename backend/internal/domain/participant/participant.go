@@ -12,6 +12,7 @@ type Participant struct {
 
 type Repository interface {
 	GetAll(ctx context.Context) ([]Participant, error)
+	Search(ctx context.Context, words []string) ([]Participant, error)
 	GetByIDs(ctx context.Context, ids []int) ([]Participant, error)
 	Create(ctx context.Context, p *Participant) (*Participant, error)
 	Update(ctx context.Context, p *Participant) (*Participant, error)
