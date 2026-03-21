@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -e
 
-docker compose --profile test up --build "$@"
+docker network prune -f
+docker compose --profile test up --build --pull never "$@"

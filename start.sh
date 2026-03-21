@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
 set -e
 
-docker compose up --build "$@"
+docker network prune -f
+docker compose up --build --pull never "$@"
