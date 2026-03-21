@@ -27,7 +27,7 @@ The frontend is a **pure display layer**. It contains no business logic — all 
 | `/` | MeetingListPage | Paginated meeting list |
 | `/meetings/new` | CreateMeetingPage | 5-step meeting creation wizard |
 | `/meetings/:id` | MeetingDetailPage | Full meeting info, inline editing, drag-and-drop reorder, DOCX export |
-| `/participants` | ParticipantsPage | Browse/search, edit, delete participants; add new |
+| `/people` | ParticipantsPage | Browse/search, edit, delete people; add new |
 
 ---
 
@@ -49,15 +49,19 @@ All edits are backed by API calls. Local state updates optimistically on success
 
 | Action | API call |
 |---|---|
-| Edit title / date / chairperson | `PUT /meetings/{id}` |
+| Edit title / date | `PATCH /meetings/{id}` |
+| Set / replace chairperson | `PUT /meetings/{id}/chairperson` |
 | Delete meeting | `DELETE /meetings/{id}` → navigate to `/` |
-| Add participant (search + click) | `POST /meetings/{id}/participants` |
-| Remove participant (× button) | `DELETE /meetings/{id}/participants/{pid}` |
-| Reorder participants (drag-and-drop) | `PUT /meetings/{id}/participants/order` |
-| Add agenda item | `POST /meetings/{id}/agenda` |
-| Edit agenda item inline | `PUT /meetings/{id}/agenda/{item_id}` |
-| Delete agenda item | `DELETE /meetings/{id}/agenda/{item_id}` |
-| Reorder agenda items (drag-and-drop) | `PUT /meetings/{id}/agenda/order` |
+| Add person (search + click) | `POST /meetings/{id}/people` |
+| Remove person (× button) | `DELETE /meetings/{id}/people/{pid}` |
+| Reorder people (drag-and-drop) | `PUT /meetings/{id}/people/order` |
+| Add agenda item | `POST /meetings/{id}/agenda-items` |
+| Edit agenda item inline | `PUT /meetings/{id}/agenda-items/{item_id}` |
+| Delete agenda item | `DELETE /meetings/{id}/agenda-items/{item_id}` |
+| Reorder agenda items (drag-and-drop) | `PUT /meetings/{id}/agenda-items/order` |
+| Add speaker to agenda item | `POST /meetings/{id}/agenda-items/{item_id}/speakers` |
+| Remove speaker from agenda item | `DELETE /meetings/{id}/agenda-items/{item_id}/speakers/{pid}` |
+| Reorder speakers (drag-and-drop) | `PUT /meetings/{id}/agenda-items/{item_id}/speakers/order` |
 
 ---
 
@@ -72,13 +76,13 @@ Both lists on MeetingDetailPage support drag-and-drop using the native HTML5 DnD
 
 ---
 
-## Participant Search
+## People Search
 
-Search is performed by the backend (`GET /participants?q=...`). The frontend debounces the input by 300ms before making the API call. No client-side filtering.
+Search is performed by the backend (`GET /people?q=...`). The frontend debounces the input by 300ms before making the API call. No client-side filtering.
 
-- **ParticipantsPage**: always calls the API; empty query returns all participants
+- **ParticipantsPage**: always calls the API; empty query returns all people
 - **ParticipantSearch** (wizard step 2): only calls API when query is non-empty; shows results in a scrollable dropdown
-- **MeetingDetailPage**: inline search box for adding participants to an existing meeting
+- **MeetingDetailPage**: inline search box for adding people to an existing meeting
 
 ---
 
@@ -86,8 +90,8 @@ Search is performed by the backend (`GET /participants?q=...`). The frontend deb
 
 - `types.ts` — TypeScript interfaces mirroring OpenAPI schemas
 - `client.ts` — base fetch wrapper with JSON handling and error parsing
-- `participants.ts` — `getParticipants(q?)`, `createParticipant`, `updateParticipant`, `deleteParticipant`
-- `meetings.ts` — `getMeetings`, `createMeeting`, `getMeeting`, `updateMeeting`, `deleteMeeting`, `addMeetingParticipant`, `removeMeetingParticipant`, `addAgendaItem`, `updateAgendaItem`, `deleteAgendaItem`, `reorderParticipants`, `reorderAgendaItems`, `downloadAgenda`, `downloadParticipants`
+- `people.ts` — `getPeople(q?)`, `getPersonById`, `createPerson`, `updatePerson`, `deletePerson`
+- `meetings.ts` — `getMeetings`, `createMeeting`, `getMeeting`, `updateMeeting`, `setChairperson`, `deleteMeeting`, `addMeetingPerson`, `removeMeetingPerson`, `reorderPeople`, `addAgendaItem`, `updateAgendaItem`, `deleteAgendaItem`, `reorderAgendaItems`, `addAgendaItemSpeaker`, `removeAgendaItemSpeaker`, `reorderAgendaItemSpeakers`, `downloadAgenda`, `downloadParticipants`
 
 Export endpoints trigger browser file download via `URL.createObjectURL(blob)`.
 
@@ -100,7 +104,7 @@ src/
 ├── api/
 │   ├── types.ts
 │   ├── client.ts
-│   ├── participants.ts
+│   ├── people.ts
 │   └── meetings.ts
 ├── components/
 │   ├── ParticipantSearch.tsx   # Debounced search input + API results + add-to-db form
@@ -121,9 +125,10 @@ src/
 
 ## Key Constraints (enforced server-side, reflected in UI)
 
-- Chairperson must be a participant of the meeting (guaranteed on create by wizard design; on update enforced by API with 422)
-- All speakers must be participants of the meeting (422 if not)
+- Chairperson must already be in the meeting's people list (`PUT /meetings/{id}/chairperson` returns 422 otherwise)
+- All speakers must be in the meeting's people list (422 if not)
 - Cannot remove chairperson or speaker from meeting without reassigning first (409)
-- At least 1 participant and 1 agenda item required to create a meeting
-- Reorder PUT body must contain exactly the same IDs as current meeting (422 on mismatch)
-- Participant deletion blocked if referenced in any meeting (409)
+- Cannot remove the last speaker from an agenda item (409)
+- Reorder PUT body must contain exactly the same IDs as current state (422 on mismatch)
+- Person deletion blocked if referenced in any meeting (409)
+- Export blocked (409) while meeting status is `incomplete`

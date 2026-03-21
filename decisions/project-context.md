@@ -47,7 +47,7 @@ meetings-editor/
 
 ## Data Model
 
-### Participant
+### Person
 - `id` (int) — auto-assigned by DB
 - `last_name` (string, required)
 - `first_name` (string, required)
@@ -60,63 +60,74 @@ meetings-editor/
 - `id` (UUID) — assigned by server
 - `title` (string) — meeting topic, appears in document headers
 - `date` (ISO 8601 datetime, UTC) — date and time of the meeting
-- `chairperson` — resolved Participant object (председательствующий)
-- `agenda_items` — ordered list of `{ id, text, speaker }` (speaker is resolved Participant)
-- `participants` — ordered list of Participant objects; order is user-controlled
+- `status` — derived: `"incomplete"` or `"complete"` (not stored; computed at read time)
+- `chairperson` — resolved Person object (председательствующий); nullable
+- `agenda_items` — ordered list of `{ id, text, speakers }` (speakers is an ordered list of resolved Person objects, min 1)
+- `people` — ordered list of Person objects; order is user-controlled
 - `created_at` — record creation timestamp
 
 ### Constraints (enforced by server)
-- `chairperson_id` must be present in `participant_ids` (on create and update)
-- All `speaker_id` values in `agenda_items` must be present in meeting's participants
+- Chairperson must already be in the meeting's people list (`PUT /meetings/{id}/chairperson` returns 422 otherwise)
+- All speaker IDs in agenda items must be in the meeting's people list (422 otherwise)
 - All referenced IDs must exist in the database (server returns 422 otherwise)
-- Cannot remove a participant from a meeting if they are the chairperson (409)
-- Cannot remove a participant from a meeting if they are a speaker on any agenda item (409)
-- Cannot delete a participant from the database if they appear in any meeting (409, FK constraint)
+- Cannot remove a person from a meeting if they are the chairperson (409)
+- Cannot remove a person from a meeting if they are a speaker on any agenda item (409)
+- Cannot delete a person from the database if they appear in any meeting (409, FK constraint)
+- Cannot remove the last speaker from an agenda item (409 — at least one must remain)
+- Export blocked (409) when meeting is `incomplete`: no chairperson, no people, or no agenda items
 
 ---
 
 ## API Endpoints
 
-### Participants
+### People
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/participants` | List all participants ordered by name |
-| GET | `/participants?q=...` | Search — word-by-word partial match using pg_trgm; returns up to 100 results |
-| POST | `/participants` | Create participant. Returns 409 if name already exists |
-| PUT | `/participants/{id}` | Update participant. Returns 409 on name conflict |
-| DELETE | `/participants/{id}` | Delete participant. Returns 409 if referenced in any meeting |
+| GET | `/people` | List all people ordered by name |
+| GET | `/people?q=...` | Search — word-by-word partial match using pg_trgm; returns up to 100 results |
+| GET | `/people/{id}` | Get a single person by ID |
+| POST | `/people` | Create person. Returns 409 if name already exists |
+| PATCH | `/people/{id}` | Partially update person. Returns 409 on name conflict |
+| DELETE | `/people/{id}` | Delete person. Returns 409 if referenced in any meeting |
 
 ### Meetings
 
 | Method | Path | Description |
 |---|---|---|
 | GET | `/meetings` | Paginated list, ordered newest first. Params: limit (default 20, max 100), offset |
-| POST | `/meetings` | Create meeting in one shot. Returns 422 if any ID doesn't exist |
+| POST | `/meetings` | Create meeting with only `title` + `date`. Returns meeting with `status: incomplete` |
 | GET | `/meetings/{id}` | Full meeting details (resolved objects) |
-| PUT | `/meetings/{id}` | Update title, date, chairperson_id. Chairperson must be in meeting's participants |
-| DELETE | `/meetings/{id}` | Delete meeting. Cascades to agenda_items and meeting_participants |
-| POST | `/meetings/{id}/participants` | Add participant. Returns 409 if already in meeting, 422 if ID not found |
-| DELETE | `/meetings/{id}/participants/{pid}` | Remove participant. Returns 409 if chairperson or agenda speaker |
-| PUT | `/meetings/{id}/participants/order` | Reorder. Body: `{ participant_ids: [...] }` — exact set, new order. Returns 422 on mismatch |
-| POST | `/meetings/{id}/agenda` | Add agenda item. Speaker must be in meeting's participants |
-| PUT | `/meetings/{id}/agenda/{item_id}` | Update text and/or speaker of an agenda item |
-| DELETE | `/meetings/{id}/agenda/{item_id}` | Delete an agenda item |
-| PUT | `/meetings/{id}/agenda/order` | Reorder. Body: `{ agenda_item_ids: [...] }` — exact set, new order. Returns 422 on mismatch |
-| GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx |
-| GET | `/meetings/{id}/export/participants` | Download Список участников as .docx |
+| GET | `/meetings/{id}/meta` | Scalar fields only: id, title, date, status, chairperson, created_at |
+| GET | `/meetings/{id}/people` | Ordered people list for this meeting |
+| GET | `/meetings/{id}/agenda-items` | Ordered agenda items (with resolved speakers) for this meeting |
+| PATCH | `/meetings/{id}` | Partially update title and/or date |
+| DELETE | `/meetings/{id}` | Delete meeting (cascades to agenda_items and meeting_people) |
+| PUT | `/meetings/{id}/chairperson` | Set or replace chairperson. Person must be in meeting's people list (422 otherwise) |
+| POST | `/meetings/{id}/people` | Add person. Returns 409 if already in meeting, 422 if ID not found |
+| DELETE | `/meetings/{id}/people/{pid}` | Remove person. Returns 409 if chairperson or agenda speaker |
+| PUT | `/meetings/{id}/people/order` | Reorder. Body: `{ person_ids: [...] }` — exact set, new order. Returns 422 on mismatch |
+| POST | `/meetings/{id}/agenda-items` | Add agenda item. Body: `{ text, speaker_ids: [...] }`. Returns 422 if any speaker not in meeting |
+| PUT | `/meetings/{id}/agenda-items/{item_id}` | Replace text and full speaker list of an agenda item |
+| DELETE | `/meetings/{id}/agenda-items/{item_id}` | Delete an agenda item |
+| PUT | `/meetings/{id}/agenda-items/order` | Reorder. Body: `{ agenda_item_ids: [...] }` — exact set. Returns 422 on mismatch |
+| POST | `/meetings/{id}/agenda-items/{item_id}/speakers` | Add a speaker. Person must be in meeting's people list |
+| DELETE | `/meetings/{id}/agenda-items/{item_id}/speakers/{pid}` | Remove a speaker. Returns 409 if last speaker |
+| PUT | `/meetings/{id}/agenda-items/{item_id}/speakers/order` | Reorder speakers. Body: `{ person_ids: [...] }` |
+| GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx (409 if meeting incomplete) |
+| GET | `/meetings/{id}/export/participants` | Download Список участников as .docx (409 if meeting incomplete) |
 
-Mutation endpoints that modify meeting content (`PUT /meetings/{id}`, `POST/DELETE /meetings/{id}/participants`, `POST/PUT/DELETE /meetings/{id}/agenda/{item_id}`) return the updated full `Meeting` object.
+Mutation endpoints return the updated full `Meeting` object (except reorder endpoints which return 204).
 
 Full spec: `openapi.yaml` at repo root.
 
 ---
 
-## Participant Search
+## People Search
 
 Search is **word-by-word partial match** performed by the backend. The query string is split on whitespace into words; every word must appear somewhere in the concatenated `last_name + ' ' + first_name + ' ' + middle_name` (case-insensitive).
 
-Performance: backed by a GIN trigram index on the name expression (migration 002, `pg_trgm` extension). Efficient up to ~100k participants. Results capped at 100.
+Performance: backed by a GIN trigram index on the name expression (migration 002, `pg_trgm` extension). Efficient up to ~100k people. Results capped at 100.
 
 Frontend debounces the search input by 300ms before calling the API.
 

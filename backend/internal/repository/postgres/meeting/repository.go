@@ -22,7 +22,7 @@ const (
 		RETURNING id, created_at`
 
 	queryInsertMeetingParticipant = `
-		INSERT INTO meeting_participants (meeting_id, participant_id, position)
+		INSERT INTO meeting_participants (meeting_id, person_id, position)
 		VALUES ($1, $2, $3)`
 
 	queryCountMeetings = `SELECT COUNT(*) FROM meetings`
@@ -51,20 +51,20 @@ const (
 	queryGetAgendaItemSpeakers = `
 		SELECT ais.agenda_item_id, p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM agenda_item_speakers ais
-		JOIN participants p ON p.id = ais.participant_id
+		JOIN participants p ON p.id = ais.person_id
 		WHERE ais.agenda_item_id = ANY($1)
 		ORDER BY ais.agenda_item_id, ais.position`
 
 	queryGetMeetingPeople = `
 		SELECT p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meeting_participants mp
-		JOIN participants p ON p.id = mp.participant_id
+		JOIN participants p ON p.id = mp.person_id
 		WHERE mp.meeting_id = $1
 		ORDER BY mp.position`
 
 	queryUpdatePersonPosition = `
 		UPDATE meeting_participants SET position = $3
-		WHERE meeting_id = $1 AND participant_id = $2`
+		WHERE meeting_id = $1 AND person_id = $2`
 
 	queryUpdateAgendaItemPosition = `
 		UPDATE agenda_items SET position = $2
@@ -81,12 +81,12 @@ const (
 	queryDeleteMeeting = `DELETE FROM meetings WHERE id = $1`
 
 	queryAddMeetingPerson = `
-		INSERT INTO meeting_participants (meeting_id, participant_id, position)
+		INSERT INTO meeting_participants (meeting_id, person_id, position)
 		VALUES ($1, $2,
 		  (SELECT COALESCE(MAX(position), -1) + 1 FROM meeting_participants WHERE meeting_id = $1))`
 
 	queryRemoveMeetingPerson = `
-		DELETE FROM meeting_participants WHERE meeting_id = $1 AND participant_id = $2`
+		DELETE FROM meeting_participants WHERE meeting_id = $1 AND person_id = $2`
 
 	queryAddAgendaItem = `
 		INSERT INTO agenda_items (meeting_id, position, text)
@@ -96,7 +96,7 @@ const (
 		RETURNING id`
 
 	queryInsertAgendaItemSpeaker = `
-		INSERT INTO agenda_item_speakers (agenda_item_id, participant_id, position)
+		INSERT INTO agenda_item_speakers (agenda_item_id, person_id, position)
 		VALUES ($1, $2, $3)
 		ON CONFLICT DO NOTHING`
 
@@ -104,11 +104,11 @@ const (
 		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1`
 
 	queryDeleteAgendaItemSpeaker = `
-		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1 AND participant_id = $2`
+		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1 AND person_id = $2`
 
 	queryUpdateAgendaItemSpeakerPosition = `
 		UPDATE agenda_item_speakers SET position = $3
-		WHERE agenda_item_id = $1 AND participant_id = $2`
+		WHERE agenda_item_id = $1 AND person_id = $2`
 
 	queryUpdateAgendaItem = `
 		UPDATE agenda_items SET text = $3

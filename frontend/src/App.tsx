@@ -13,7 +13,7 @@ function Layout({ children }: { children: React.ReactNode }) {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
           <Link to="/" className="font-semibold text-gray-900 text-sm">Редактор совещаний</Link>
-          <Link to="/participants" className="text-sm text-gray-500 hover:text-gray-700">Участники</Link>
+          <Link to="/people" className="text-sm text-gray-500 hover:text-gray-700">Участники</Link>
         </div>
       </header>
       <main>{children}</main>
@@ -30,7 +30,7 @@ export default function App() {
             <Route path="/" element={<MeetingListPage />} />
             <Route path="/meetings/new" element={<CreateMeetingPage />} />
             <Route path="/meetings/:id" element={<MeetingDetailPage />} />
-            <Route path="/participants" element={<ParticipantsPage />} />
+            <Route path="/people" element={<ParticipantsPage />} />
           </Routes>
         </Layout>
       </BrowserRouter>

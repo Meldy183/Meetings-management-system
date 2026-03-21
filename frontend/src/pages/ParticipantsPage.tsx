@@ -41,6 +41,8 @@ export function ParticipantsPage() {
     onError: (e) => {
       if (e instanceof ApiError && e.status === 409) {
         alert('Нельзя удалить: участник привязан к существующим совещаниям')
+      } else {
+        alert('Ошибка при удалении участника')
       }
     },
   })

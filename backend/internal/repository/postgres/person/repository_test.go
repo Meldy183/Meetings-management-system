@@ -130,12 +130,13 @@ func TestPersonRepo_Search_MultipleWords(t *testing.T) {
 		}
 	}
 
-	results, err := repo.Search(ctx, []string{"иванов", "иван"})
+	// "иванов пётр" — "пётр" is not a substring of any part of person 1's name,
+	// so AND logic should return only person 2.
+	results, err := repo.Search(ctx, []string{"иванов", "пётр"})
 	if err != nil {
 		t.Fatalf("Search: %v", err)
 	}
-	// Should only match the one with both "иванов" and "иван" in their name
-	if len(results) != 1 || results[0].FirstName != "Иван" {
+	if len(results) != 1 || results[0].FirstName != "Пётр" {
 		t.Errorf("unexpected multi-word search result: %v", results)
 	}
 }

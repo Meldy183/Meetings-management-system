@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getMeeting, downloadAgenda, downloadParticipants,
-  reorderPeople, reorderAgendaItems,
+  reorderPeople, reorderAgendaItems, reorderAgendaItemSpeakers,
   updateMeeting, setChairperson, deleteMeeting,
   addMeetingPerson, removeMeetingPerson,
   addAgendaItem, updateAgendaItem, deleteAgendaItem,
@@ -49,6 +49,10 @@ export function MeetingDetailPage() {
   // DnD local state
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
   const [people, setPeople] = useState<Person[]>([])
+
+  // Speaker drag-and-drop state (one drag active at a time across all agenda items)
+  const speakerDragSrc = useRef<{ itemId: number; index: number } | null>(null)
+  const [speakerDragOver, setSpeakerDragOver] = useState<{ itemId: number; index: number } | null>(null)
 
   // Edit meeting metadata state
   const [editingMeeting, setEditingMeeting] = useState(false)
@@ -165,6 +169,38 @@ export function MeetingDetailPage() {
     mutationFn: (itemId: number) => deleteAgendaItem(id!, itemId),
     onSuccess: (updated) => setMeetingData(updated),
   })
+
+  const reorderSpeakersMutation = useMutation({
+    mutationFn: ({ itemId, ids }: { itemId: number; ids: number[] }) =>
+      reorderAgendaItemSpeakers(id!, itemId, ids),
+    onError: () => { if (meeting) setAgendaItems(meeting.agenda_items) },
+  })
+
+  function handleSpeakerDragStart(itemId: number, index: number) {
+    speakerDragSrc.current = { itemId, index }
+  }
+  function handleSpeakerDragOver(e: React.DragEvent, itemId: number, index: number) {
+    e.preventDefault()
+    setSpeakerDragOver({ itemId, index })
+  }
+  function handleSpeakerDrop(toIndex: number) {
+    const src = speakerDragSrc.current
+    speakerDragSrc.current = null
+    setSpeakerDragOver(null)
+    if (!src || src.index === toIndex) return
+    setAgendaItems(prev => prev.map(item => {
+      if (item.id !== src.itemId) return item
+      const next = [...item.speakers]
+      const [moved] = next.splice(src.index, 1)
+      next.splice(toIndex, 0, moved)
+      reorderSpeakersMutation.mutate({ itemId: item.id, ids: next.map(s => s.id) })
+      return { ...item, speakers: next }
+    }))
+  }
+  function handleSpeakerDragEnd() {
+    speakerDragSrc.current = null
+    setSpeakerDragOver(null)
+  }
 
   // DnD hooks
   const agendaDnd = useDragReorder(agendaItems, (reordered) => {
@@ -508,10 +544,32 @@ export function MeetingDetailPage() {
                   <span className="text-xs text-gray-400 w-5 shrink-0 mt-0.5">{i + 1}.</span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{item.text}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {item.speakers.length === 1 ? 'Докладчик' : 'Докладчики'}:{' '}
-                      {item.speakers.map(s => fullName(s)).join(', ')}
-                    </p>
+                    {item.speakers.length === 1 ? (
+                      <p className="text-xs text-gray-500 mt-1">Докладчик: {fullName(item.speakers[0])}</p>
+                    ) : (
+                      <div className="mt-1">
+                        <p className="text-xs text-gray-400 mb-0.5">Докладчики:</p>
+                        {item.speakers.map((s, si) => (
+                          <div
+                            key={s.id}
+                            draggable
+                            onDragStart={() => handleSpeakerDragStart(item.id, si)}
+                            onDragOver={(e) => handleSpeakerDragOver(e, item.id, si)}
+                            onDrop={() => handleSpeakerDrop(si)}
+                            onDragEnd={handleSpeakerDragEnd}
+                            className={[
+                              'flex items-center gap-1.5 text-xs text-gray-500 rounded px-1 py-0.5 transition-colors cursor-grab active:cursor-grabbing',
+                              speakerDragOver?.itemId === item.id && speakerDragOver?.index === si
+                                ? 'bg-blue-50 text-blue-700'
+                                : '',
+                            ].join(' ')}
+                          >
+                            <span className="text-gray-300 select-none">⠿</span>
+                            {fullName(s)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button

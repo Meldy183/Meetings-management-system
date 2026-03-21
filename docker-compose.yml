@@ -53,6 +53,8 @@ services:
       dockerfile: Dockerfile
       target: test
     depends_on:
+      db:
+        condition: service_healthy
       migrate-test:
         condition: service_completed_successfully
     environment:
@@ -84,7 +86,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "80:80"
+      - "8081:80"
 
 volumes:
   postgres_data:

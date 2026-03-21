@@ -258,6 +258,7 @@ paths:
                   - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
                     title: совещания по вопросам поддержки применения ИИ в науке
                     date: '2026-02-26T11:00:00Z'
+                    status: complete
                     chairperson:
                       id: 42
                       last_name: Иванов
@@ -336,13 +337,14 @@ paths:
                   middle_name: Иванович
                   info: Заместитель руководителя Секретариата
                 agenda_items:
-                  - text: Вступительное слово
-                    speaker:
-                      id: 42
-                      last_name: Иванов
-                      first_name: Иван
-                      middle_name: Иванович
-                      info: Заместитель руководителя Секретариата
+                  - id: 1
+                    text: Вступительное слово
+                    speakers:
+                      - id: 42
+                        last_name: Иванов
+                        first_name: Иван
+                        middle_name: Иванович
+                        info: Заместитель руководителя Секретариата
                 people:
                   - id: 42
                     last_name: Иванов
@@ -494,57 +496,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
-    post:
-      tags:
-    put:
-      tags:
-        - meetings
-      summary: Set or replace the chairperson
-      description: >
-        Sets (or replaces) the chairperson for the specified meeting.
-        The person must already be in the meeting's people list.
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetChairperson'
-      responses:
-        '200':
-          description: Chairperson set successfully — returns the updated meeting
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Meeting'
-        '400':
-          description: Missing or invalid body
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorBadRequest'
-        '404':
-          description: Meeting not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorNotFound'
-        '422':
-          description: Person is not in the meeting's people list
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorUnprocessableEntity'
-              example:
-                message: chairperson must be a person in this meeting
-
     post:
       tags:
         - meetings
@@ -706,6 +657,56 @@ paths:
               example:
                 message: person IDs must exactly match the meeting's current people
 
+  /meetings/{id}/chairperson:
+    put:
+      tags:
+        - meetings
+      summary: Set or replace the chairperson
+      description: >
+        Sets (or replaces) the chairperson for the specified meeting.
+        The person must already be in the meeting's people list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetChairperson'
+      responses:
+        '200':
+          description: Chairperson set successfully — returns the updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '400':
+          description: Missing or invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBadRequest'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: Person is not in the meeting's people list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnprocessableEntity'
+              example:
+                message: chairperson must be a person in this meeting
+
   /meetings/{id}/agenda-items:
     get:
       tags:
@@ -713,7 +714,7 @@ paths:
       summary: Get meeting agenda items
       description: >
         Returns the ordered list of agenda items for this meeting, each
-        including the resolved speaker. Order matches the display order set
+        including the resolved speakers. Order matches the display order set
         via PUT /meetings/{id}/agenda-items/order.
       parameters:
         - name: id

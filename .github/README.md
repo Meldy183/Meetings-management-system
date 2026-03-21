@@ -41,34 +41,42 @@ Browser (mobile web app)
 
 ## API Overview
 
-### Participants
+### People
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/participants` | List all participants (ordered by name) |
-| `GET` | `/participants?q=...` | Search participants — word-by-word partial match, backed by pg_trgm trigram index |
-| `POST` | `/participants` | Create a new participant |
-| `PUT` | `/participants/{id}` | Update an existing participant |
-| `DELETE` | `/participants/{id}` | Delete a participant (409 if referenced in any meeting) |
+| `GET` | `/people` | List all people (ordered by name) |
+| `GET` | `/people?q=...` | Search people — word-by-word partial match, backed by pg_trgm trigram index |
+| `GET` | `/people/{id}` | Get a single person by ID |
+| `POST` | `/people` | Create a new person |
+| `PATCH` | `/people/{id}` | Partially update a person |
+| `DELETE` | `/people/{id}` | Delete a person (409 if referenced in any meeting) |
 
 ### Meetings
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/meetings` | List meetings, paginated (newest first) |
-| `POST` | `/meetings` | Create a meeting in one shot |
+| `POST` | `/meetings` | Create a meeting (title + date only; starts as `incomplete`) |
 | `GET` | `/meetings/{id}` | Get full meeting details |
-| `PUT` | `/meetings/{id}` | Update meeting title, date, or chairperson |
-| `DELETE` | `/meetings/{id}` | Delete a meeting (cascades to participants/agenda) |
-| `POST` | `/meetings/{id}/participants` | Add a participant to an existing meeting |
-| `DELETE` | `/meetings/{id}/participants/{pid}` | Remove a participant (409 if chairperson or agenda speaker) |
-| `PUT` | `/meetings/{id}/participants/order` | Reorder participants (drag-and-drop) |
-| `POST` | `/meetings/{id}/agenda` | Add an agenda item (speaker must be in meeting) |
-| `PUT` | `/meetings/{id}/agenda/{item_id}` | Update agenda item text or speaker |
-| `DELETE` | `/meetings/{id}/agenda/{item_id}` | Remove an agenda item |
-| `PUT` | `/meetings/{id}/agenda/order` | Reorder agenda items (drag-and-drop) |
-| `GET` | `/meetings/{id}/export/agenda` | Export agenda as `.docx` |
-| `GET` | `/meetings/{id}/export/participants` | Export participant list as `.docx` |
+| `GET` | `/meetings/{id}/meta` | Get scalar fields only (id, title, date, status, chairperson, created_at) |
+| `GET` | `/meetings/{id}/people` | Get ordered people list for this meeting |
+| `GET` | `/meetings/{id}/agenda-items` | Get ordered agenda items (with resolved speakers) for this meeting |
+| `PATCH` | `/meetings/{id}` | Partially update title and/or date |
+| `DELETE` | `/meetings/{id}` | Delete a meeting (cascades) |
+| `PUT` | `/meetings/{id}/chairperson` | Set or replace chairperson (must be in meeting's people list) |
+| `POST` | `/meetings/{id}/people` | Add a person to an existing meeting |
+| `DELETE` | `/meetings/{id}/people/{pid}` | Remove a person (409 if chairperson or agenda speaker) |
+| `PUT` | `/meetings/{id}/people/order` | Reorder people (drag-and-drop) |
+| `POST` | `/meetings/{id}/agenda-items` | Add an agenda item (speakers must be in meeting) |
+| `PUT` | `/meetings/{id}/agenda-items/{item_id}` | Replace agenda item text and full speaker list |
+| `DELETE` | `/meetings/{id}/agenda-items/{item_id}` | Remove an agenda item |
+| `PUT` | `/meetings/{id}/agenda-items/order` | Reorder agenda items (drag-and-drop) |
+| `POST` | `/meetings/{id}/agenda-items/{item_id}/speakers` | Add a speaker to an agenda item |
+| `DELETE` | `/meetings/{id}/agenda-items/{item_id}/speakers/{pid}` | Remove a speaker (409 if last) |
+| `PUT` | `/meetings/{id}/agenda-items/{item_id}/speakers/order` | Reorder speakers within an agenda item |
+| `GET` | `/meetings/{id}/export/agenda` | Export agenda as `.docx` (409 if meeting incomplete) |
+| `GET` | `/meetings/{id}/export/participants` | Export participant list as `.docx` (409 if meeting incomplete) |
 
 See [`openapi.yaml`](../openapi.yaml) for the full specification.
 
@@ -76,18 +84,18 @@ See [`openapi.yaml`](../openapi.yaml) for the full specification.
 
 ## Meeting Creation Flow (frontend)
 
-1. Enter meeting **title** and **date/time**
-2. Search participants by name → add to list. If not found → create inline
-3. Pick **chairperson** from the assembled participant list
-4. Add **agenda items** — each item has a text and a speaker picked from the participant list
-5. Submit ("Зафиксировать") → single `POST /meetings`
+1. Create meeting with **title** and **date/time** → `POST /meetings` (returns `incomplete` meeting)
+2. Search people by name → add to meeting via `POST /meetings/{id}/people`. If not found → create inline
+3. Set **chairperson** via `PUT /meetings/{id}/chairperson` (must be in people list)
+4. Add **agenda items** via `POST /meetings/{id}/agenda-items` — each item has text and one or more speakers picked from the people list
+5. Meeting becomes `complete` once chairperson, people, and agenda items are all set
 
 After creation, the meeting detail page supports:
-- Drag-and-drop reorder of participants and agenda items
-- Edit meeting title, date, and chairperson inline
-- Add/remove participants
-- Add, edit, and delete agenda items
-- Download `.docx` exports
+- Drag-and-drop reorder of people and agenda items
+- Edit meeting title and date inline
+- Add/remove people and set chairperson
+- Add, edit, delete, and reorder agenda items and their speakers
+- Download `.docx` exports (blocked with 409 while meeting is `incomplete`)
 
 ---
 
@@ -161,7 +169,9 @@ meetings-editor/
 │   │   └── transport/http/ # Handlers, middleware, HTTP models
 │   ├── migrations/         # SQL migration files (golang-migrate)
 │   │   ├── 001_init        # Schema: participants, meetings, agenda_items, meeting_participants
-│   │   └── 002_search_index # pg_trgm extension + GIN trigram index for participant search
+│   │   ├── 002_search_index # pg_trgm extension + GIN trigram index for people search
+│   │   ├── 003_nullable_chairperson # Makes chairperson_id nullable
+│   │   └── 004_agenda_item_speakers # Replaces single speaker_id with ordered speakers table
 │   └── go.mod
 ├── frontend/
 │   ├── src/
