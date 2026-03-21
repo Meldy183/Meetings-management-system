@@ -10,7 +10,7 @@ import (
 	"time"
 
 	domMeeting "meetings-editor/internal/domain/meeting"
-	"meetings-editor/internal/domain/participant"
+	"meetings-editor/internal/domain/person"
 )
 
 // Generator implements handler.ExportService.
@@ -25,7 +25,11 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА совещания "+m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
-	body.WriteString(para(pPrCenter() + tnr(fullName(m.Chairperson), 28)))
+	chairName := ""
+	if m.Chairperson != nil {
+		chairName = fullName(*m.Chairperson)
+	}
+	body.WriteString(para(pPrCenter() + tnr(chairName, 28)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 
 	// Agenda items
@@ -47,10 +51,14 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК участников совещания "+m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
-	body.WriteString(para(pPrCenter() + tnr(fullName(m.Chairperson), 28)))
+	pChairName := ""
+	if m.Chairperson != nil {
+		pChairName = fullName(*m.Chairperson)
+	}
+	body.WriteString(para(pPrCenter() + tnr(pChairName, 28)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 	body.WriteString(para(pPrLeft())) // blank line before table
-	body.WriteString(participantsTable(m.Participants))
+	body.WriteString(participantsTable(m.People))
 
 	return buildDocx(body.String())
 }
@@ -107,7 +115,7 @@ func tnrCell(s string, size int) string {
 
 // tnrCellNameSplit renders LASTNAME on line 1 and "Firstname Patronymic" on line 2
 // inside a single paragraph using a line break.
-func tnrCellNameSplit(p participant.Participant, size int) string {
+func tnrCellNameSplit(p person.Person, size int) string {
 	lastName := strings.ToUpper(p.LastName)
 	firstMid := strings.TrimSpace(p.FirstName + " " + p.MiddleName)
 	rProps := fmt.Sprintf(
@@ -123,7 +131,7 @@ func tnrCellNameSplit(p participant.Participant, size int) string {
 // --- table helpers ---
 
 // agendaTable renders a borderless 3-column table: name | "–" | info.
-func agendaTable(sp participant.Participant) string {
+func agendaTable(sp person.Person) string {
 	// Column widths (dxa): name=4000, dash=300, info=5054. Total≈9354 (A4 text width).
 	name := strings.ToUpper(sp.LastName) + "\n" + strings.TrimSpace(sp.FirstName+" "+sp.MiddleName)
 	nameRProps := `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>`
@@ -155,7 +163,7 @@ func agendaTable(sp participant.Participant) string {
 }
 
 // participantsTable renders a borderless 4-column table: № | name | "–" | info.
-func participantsTable(participants []participant.Participant) string {
+func participantsTable(participants []person.Person) string {
 	var sb strings.Builder
 	sb.WriteString(`
 <w:tbl>
@@ -260,7 +268,7 @@ func buildDocx(body string) ([]byte, error) {
 
 // --- utilities ---
 
-func fullName(p participant.Participant) string {
+func fullName(p person.Person) string {
 	name := p.LastName + " " + p.FirstName
 	if p.MiddleName != "" {
 		name += " " + p.MiddleName

@@ -4,7 +4,7 @@ info:
   title: Meeting Bot API
   description: >
     REST API for the Meetings Editor Telegram Mini App.
-    Provides participant lookup, meeting creation, and .docx export.
+    Provides person lookup, meeting creation, and .docx export.
   version: 1.0.0
 
 servers:
@@ -12,19 +12,19 @@ servers:
     description: Local development
 
 tags:
-  - name: participants
-    description: Participant management
+  - name: people
+    description: Person management
   - name: meetings
     description: Meeting management and export
 
 paths:
-  /participants:
+  /people:
     get:
       tags:
-        - participants
-      summary: List or search participants
+        - people
+      summary: List or search people
       description: >
-        Without `q`: returns all participants ordered by last_name, first_name.
+        Without `q`: returns all people ordered by last_name, first_name.
 
         With `q`: performs a word-by-word partial match search. The query is split
         on whitespace into words; every word must appear somewhere in the
@@ -44,13 +44,13 @@ paths:
           example: Иванов Иван
       responses:
         '200':
-          description: List of participants (all, or matching q)
+          description: List of people (all, or matching q)
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Participant'
+                  $ref: '#/components/schemas/Person'
               example:
                 - id: 42
                   last_name: Иванов
@@ -65,18 +65,18 @@ paths:
 
     post:
       tags:
-        - participants
-      summary: Create a new participant
+        - people
+      summary: Create a new person
       description: >
-        Adds a new participant to the database.
-        Returns 409 Conflict if a participant with the same last_name,
+        Adds a new person to the database.
+        Returns 409 Conflict if a person with the same last_name,
         first_name, and middle_name already exists.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ParticipantCreate'
+              $ref: '#/components/schemas/PersonCreate'
             example:
               last_name: Сидоров
               first_name: Алексей
@@ -84,11 +84,11 @@ paths:
               info: Главный аналитик
       responses:
         '201':
-          description: Participant created successfully
+          description: Person created successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Participant'
+                $ref: '#/components/schemas/Person'
               example:
                 id: 99
                 last_name: Сидоров
@@ -96,30 +96,57 @@ paths:
                 middle_name: Петрович
                 info: Главный аналитик
         '409':
-          description: Participant with this name already exists
+          description: Person with this name already exists
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorConflict'
               example:
-                message: Participant already exists
+                message: Person already exists
                 details:
                   existing_id: 55
 
-  /participants/{id}:
-    put:
+  /people/{id}:
+    get:
       tags:
-        - participants
-      summary: Update a participant
-      description: >
-        Updates an existing participant's fields. All fields from ParticipantCreate
-        may be changed. Returns 409 if the new name combination already belongs
-        to a different participant.
+        - people
+      summary: Get a person by ID
+      description: Returns the full person record for the given ID.
       parameters:
         - name: id
           in: path
           required: true
-          description: Participant ID to update
+          description: Person ID
+          schema:
+            type: integer
+          example: 42
+      responses:
+        '200':
+          description: Person found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Person'
+        '404':
+          description: Person not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+    patch:
+      tags:
+        - people
+      summary: Update a person (partial)
+      description: >
+        Partially updates an existing person's fields. Only the fields present
+        in the request body are updated; omitted fields remain unchanged.
+        Returns 409 if the new name combination already belongs to a different person.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Person ID to update
           schema:
             type: integer
           example: 42
@@ -128,7 +155,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ParticipantCreate'
+              $ref: '#/components/schemas/PersonCreate'
             example:
               last_name: Иванов
               first_name: Иван
@@ -136,19 +163,19 @@ paths:
               info: Директор департамента
       responses:
         '200':
-          description: Participant updated successfully
+          description: Person updated successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Participant'
+                $ref: '#/components/schemas/Person'
         '404':
-          description: Participant not found
+          description: Person not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '409':
-          description: Another participant with the same name already exists
+          description: Another person with the same name already exists
           content:
             application/json:
               schema:
@@ -156,37 +183,37 @@ paths:
 
     delete:
       tags:
-        - participants
-      summary: Delete a participant
+        - people
+      summary: Delete a person
       description: >
-        Permanently removes a participant from the database.
-        Returns 409 if the participant is referenced in one or more existing meetings
+        Permanently removes a person from the database.
+        Returns 409 if the person is referenced in one or more existing meetings
         (FK constraint prevents deletion).
       parameters:
         - name: id
           in: path
           required: true
-          description: Participant ID to delete
+          description: Person ID to delete
           schema:
             type: integer
           example: 42
       responses:
         '204':
-          description: Participant deleted successfully
+          description: Person deleted successfully
         '404':
-          description: Participant not found
+          description: Person not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '409':
-          description: Participant is referenced in existing meetings and cannot be deleted
+          description: Person is referenced in existing meetings and cannot be deleted
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorConflict'
               example:
-                message: Participant is referenced in existing meetings
+                message: Person is referenced in existing meetings
 
   /meetings:
     get:
@@ -244,11 +271,9 @@ paths:
         - meetings
       summary: Create a meeting
       description: >
-        Creates a new meeting record in one step ("Зафиксировать").
-        The frontend sends the accumulated data: title, date, chairperson,
-        agenda items with speakers, and the IDs of all participants.
-        If any participant_id, speaker_id, or chairperson_id does not exist
-        in the database, the server returns 422 Unprocessable Entity.
+        Creates a new meeting with only a title and date. The meeting starts in
+        "incomplete" status — add people, set a chairperson, and add agenda items
+        via dedicated endpoints before exporting.
       requestBody:
         required: true
         content:
@@ -258,15 +283,6 @@ paths:
             example:
               title: совещания по вопросам поддержки применения ИИ в науке
               date: '2026-02-26T11:00:00Z'
-              chairperson_id: 42
-              agenda_items:
-                - text: Вступительное слово
-                  speaker_id: 42
-                - text: Об институте AIRI и видении применения ИИ в науке
-                  speaker_id: 17
-              participant_ids:
-                - 42
-                - 17
       responses:
         '201':
           description: Meeting created successfully
@@ -278,53 +294,11 @@ paths:
                 id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
                 title: совещания по вопросам поддержки применения ИИ в науке
                 date: '2026-02-26T11:00:00Z'
-                chairperson:
-                  id: 42
-                  last_name: Иванов
-                  first_name: Иван
-                  middle_name: Иванович
-                  info: Заместитель руководителя Секретариата
-                agenda_items:
-                  - text: Вступительное слово
-                    speaker:
-                      id: 42
-                      last_name: Иванов
-                      first_name: Иван
-                      middle_name: Иванович
-                      info: Заместитель руководителя Секретариата
-                  - text: Об институте AIRI и видении применения ИИ в науке
-                    speaker:
-                      id: 17
-                      last_name: Петрова
-                      first_name: Мария
-                      middle_name: Сергеевна
-                      info: Ведущий инженер
-                participants:
-                  - id: 42
-                    last_name: Иванов
-                    first_name: Иван
-                    middle_name: Иванович
-                    info: Заместитель руководителя Секретариата
-                  - id: 17
-                    last_name: Петрова
-                    first_name: Мария
-                    middle_name: Сергеевна
-                    info: Ведущий инженер
+                chairperson: null
+                agenda_items: []
+                people: []
+                status: incomplete
                 created_at: '2026-02-26T10:00:00Z'
-        '422':
-          description: >
-            Validation error — one or more participant_ids, speaker_ids,
-            or chairperson_id do not exist in the database.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error422'
-              example:
-                message: One or more participants not found
-                details:
-                  invalid_participant_ids:
-                    - 99
-                    - 100
 
   /meetings/{id}:
     get:
@@ -334,7 +308,7 @@ paths:
       description: >
         Returns the full meeting record for the specified UUID,
         including resolved chairperson, agenda items with speakers,
-        and the complete participant list.
+        and the complete people list.
       parameters:
         - name: id
           in: path
@@ -369,7 +343,7 @@ paths:
                       first_name: Иван
                       middle_name: Иванович
                       info: Заместитель руководителя Секретариата
-                participants:
+                people:
                   - id: 42
                     last_name: Иванов
                     first_name: Иван
@@ -380,6 +354,7 @@ paths:
                     first_name: Мария
                     middle_name: Сергеевна
                     info: Ведущий инженер
+                status: complete
                 created_at: '2026-02-26T10:00:00Z'
         '404':
           description: Meeting not found
@@ -388,14 +363,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
-    put:
+    patch:
       tags:
         - meetings
-      summary: Update meeting title, date, or chairperson
+      summary: Update meeting title and/or date (partial)
       description: >
-        Updates the title, date, and/or chairperson of an existing meeting.
-        The new chairperson_id must already be a participant of this meeting
-        (returns 422 otherwise). Returns the full updated Meeting object.
+        Partially updates the title and/or date of an existing meeting.
+        Only fields present in the request body are updated.
+        To set or change the chairperson use PUT /meetings/{id}/chairperson.
+        Returns the full updated Meeting object.
       parameters:
         - name: id
           in: path
@@ -414,7 +390,6 @@ paths:
             example:
               title: обновлённое название совещания
               date: '2026-03-01T10:00:00Z'
-              chairperson_id: 17
       responses:
         '200':
           description: Meeting updated successfully
@@ -428,16 +403,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
-        '422':
-          description: >
-            chairperson_id is not a participant of this meeting,
-            or one of the referenced IDs does not exist.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error422'
-              example:
-                message: chairperson must be a participant of the meeting
 
     delete:
       tags:
@@ -465,16 +430,66 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
-  /meetings/{id}/participants:
+  /meetings/{id}/chairperson:
+    put:
+      tags:
+        - meetings
+      summary: Set or replace the chairperson
+      description: >
+        Sets (or replaces) the chairperson for the specified meeting.
+        The person must already be in the meeting's people list.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetChairperson'
+      responses:
+        '200':
+          description: Chairperson set successfully — returns the updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '400':
+          description: Missing or invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBadRequest'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: Person is not in the meeting's people list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnprocessableEntity'
+              example:
+                message: chairperson must be a person in this meeting
+
+  /meetings/{id}/people:
     post:
       tags:
         - meetings
-      summary: Add a participant to an existing meeting
+      summary: Add a person to an existing meeting
       description: >
-        Adds an existing participant (by ID) to the specified meeting's
-        participant list. The participant is appended to the end of the list.
-        Returns 409 if the participant is already in the meeting.
-        Returns 422 if the participant ID does not exist in the database.
+        Adds an existing person (by ID) to the specified meeting's people list.
+        The person is appended to the end of the list.
+        Returns 409 if the person is already in the meeting.
+        Returns 422 if the person ID does not exist in the database.
         Returns the full updated Meeting object.
       parameters:
         - name: id
@@ -490,12 +505,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/AddMeetingParticipant'
+              $ref: '#/components/schemas/AddMeetingPerson'
             example:
-              participant_id: 55
+              person_id: 55
       responses:
         '200':
-          description: Participant added; returns updated meeting
+          description: Person added; returns updated meeting
           content:
             application/json:
               schema:
@@ -507,31 +522,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '409':
-          description: Participant is already in this meeting
+          description: Person is already in this meeting
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorConflict'
               example:
-                message: participant already in meeting
+                message: person already in meeting
         '422':
-          description: Participant ID does not exist in the database
+          description: Person ID does not exist in the database
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error422'
               example:
-                message: participant not found
+                message: person not found
 
-  /meetings/{id}/participants/{pid}:
+  /meetings/{id}/people/{pid}:
     delete:
       tags:
         - meetings
-      summary: Remove a participant from a meeting
+      summary: Remove a person from a meeting
       description: >
-        Removes a participant from the specified meeting's participant list.
-        Returns 409 if the participant is the meeting's chairperson (change
-        chairperson first via PUT /meetings/{id}) or if the participant is
+        Removes a person from the specified meeting's people list.
+        Returns 409 if the person is the meeting's chairperson (change
+        chairperson first via PUT /meetings/{id}/chairperson) or if the person is
         a speaker on any agenda item of this meeting (remove or reassign the
         agenda item first).
         Returns the full updated Meeting object on success.
@@ -547,26 +562,26 @@ paths:
         - name: pid
           in: path
           required: true
-          description: Participant ID to remove from the meeting
+          description: Person ID to remove from the meeting
           schema:
             type: integer
           example: 55
       responses:
         '200':
-          description: Participant removed; returns updated meeting
+          description: Person removed; returns updated meeting
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Meeting'
         '404':
-          description: Meeting or participant not found
+          description: Meeting or person not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '409':
           description: >
-            Cannot remove participant — they are the chairperson or a speaker
+            Cannot remove person — they are the chairperson or a speaker
             on an agenda item.
           content:
             application/json:
@@ -575,19 +590,19 @@ paths:
               example:
                 message: cannot remove chairperson from meeting
 
-  /meetings/{id}/participants/order:
+  /meetings/{id}/people/order:
     put:
       tags:
         - meetings
-      summary: Reorder participants within a meeting
+      summary: Reorder people within a meeting
       description: >
-        Replaces the display order of participants for the specified meeting.
-        The request body must contain exactly the same set of participant IDs
+        Replaces the display order of people for the specified meeting.
+        The request body must contain exactly the same set of person IDs
         already attached to the meeting — only their order changes.
         The new order is persisted and reflected in subsequent GET /meetings/{id}
         responses and in the Список участников export.
         Returns 422 if the provided IDs do not exactly match the meeting's
-        current participant set (wrong count or unknown ID).
+        current people set (wrong count or unknown ID).
       parameters:
         - name: id
           in: path
@@ -602,9 +617,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ParticipantOrder'
+              $ref: '#/components/schemas/PersonOrder'
             example:
-              participant_ids:
+              person_ids:
                 - 17
                 - 42
       responses:
@@ -618,23 +633,23 @@ paths:
                 $ref: '#/components/schemas/ErrorNotFound'
         '422':
           description: >
-            Provided participant_ids do not exactly match the meeting's
-            current participants (wrong count or unknown ID).
+            Provided person_ids do not exactly match the meeting's
+            current people (wrong count or unknown ID).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error422'
               example:
-                message: participant IDs must exactly match the meeting's current participants
+                message: person IDs must exactly match the meeting's current people
 
-  /meetings/{id}/agenda:
+  /meetings/{id}/agenda-items:
     post:
       tags:
         - meetings
       summary: Add an agenda item to an existing meeting
       description: >
         Appends a new agenda item to the meeting. The speaker_id must
-        already be a participant of this meeting (returns 422 otherwise).
+        already be a person in this meeting (returns 422 otherwise).
         Returns the full updated Meeting object.
       parameters:
         - name: id
@@ -655,7 +670,7 @@ paths:
               text: Новый пункт повестки
               speaker_id: 42
       responses:
-        '200':
+        '201':
           description: Agenda item added; returns updated meeting
           content:
             application/json:
@@ -668,22 +683,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '422':
-          description: speaker_id is not a participant of this meeting
+          description: speaker_id is not a person in this meeting
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error422'
               example:
-                message: speaker must be a participant of the meeting
+                message: speaker must be a person in this meeting
 
-  /meetings/{id}/agenda/{item_id}:
+  /meetings/{id}/agenda-items/{item_id}:
     put:
       tags:
         - meetings
       summary: Update an agenda item
       description: >
         Updates the text and/or speaker of the specified agenda item.
-        The new speaker_id must already be a participant of this meeting
+        The new speaker_id must already be a person in this meeting
         (returns 422 otherwise). Returns the full updated Meeting object.
       parameters:
         - name: id
@@ -724,13 +739,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '422':
-          description: speaker_id is not a participant of this meeting
+          description: speaker_id is not a person in this meeting
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error422'
               example:
-                message: speaker must be a participant of the meeting
+                message: speaker must be a person in this meeting
 
     delete:
       tags:
@@ -769,7 +784,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
-  /meetings/{id}/agenda/order:
+  /meetings/{id}/agenda-items/order:
     put:
       tags:
         - meetings
@@ -866,6 +881,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Meeting is incomplete (missing chairperson, people, or agenda items)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: meeting is incomplete — set chairperson, add people, and add agenda items before exporting
 
   /meetings/{id}/export/participants:
     get:
@@ -910,6 +933,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Meeting is incomplete (missing chairperson, people, or agenda items)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: meeting is incomplete — set chairperson, add people, and add agenda items before exporting
 
 components:
   schemas:
@@ -919,12 +950,11 @@ components:
       description: >
         Lightweight meeting record returned in list responses.
         Contains only the fields needed for displaying a meeting in a list —
-        full details (agenda_items, participants) are fetched via GET /meetings/{id}.
+        full details (agenda_items, people) are fetched via GET /meetings/{id}.
       required:
         - id
         - title
         - date
-        - chairperson
         - created_at
       properties:
         id:
@@ -939,9 +969,17 @@ components:
           format: date-time
           example: '2026-02-26T11:00:00Z'
         chairperson:
-          description: Resolved chairperson object
+          description: Resolved chairperson object (null if not yet set)
+          nullable: true
           allOf:
-            - $ref: '#/components/schemas/Participant'
+            - $ref: '#/components/schemas/Person'
+        status:
+          type: string
+          enum: [incomplete, complete]
+          description: >
+            incomplete — chairperson not set, or no people, or no agenda items.
+            complete — all three are present.
+          example: incomplete
         created_at:
           type: string
           format: date-time
@@ -971,9 +1009,9 @@ components:
           items:
             $ref: '#/components/schemas/MeetingSummary'
 
-    Participant:
+    Person:
       type: object
-      description: A person who can be added to a meeting.
+      description: A person in the database who can be added to meetings.
       required:
         - id
         - last_name
@@ -981,7 +1019,7 @@ components:
       properties:
         id:
           type: integer
-          description: Unique participant identifier
+          description: Unique person identifier
           example: 42
         last_name:
           type: string
@@ -1002,9 +1040,9 @@ components:
             (right column in Повестка and Список участников)
           example: Руководитель отдела
 
-    ParticipantCreate:
+    PersonCreate:
       type: object
-      description: Payload for creating a new participant.
+      description: Payload for creating or updating a person.
       required:
         - last_name
         - first_name
@@ -1031,7 +1069,7 @@ components:
       description: >
         A single agenda item submitted when creating a meeting.
         Each item has its own speaker (докладчик), who must be present
-        in participant_ids.
+        in the meeting's people list.
       required:
         - text
         - speaker_id
@@ -1045,15 +1083,15 @@ components:
         speaker_id:
           type: integer
           description: >
-            ID of the participant presenting this item (докладчик).
-            Must also appear in participant_ids.
+            ID of the person presenting this item (докладчик).
+            Must already be in the meeting's people list.
           example: 17
 
     AgendaItem:
       type: object
       description: >
         An agenda item with its speaker fully resolved.
-        The id field is used when reordering via PUT /meetings/{id}/agenda/order.
+        The id field is used when reordering via PUT /meetings/{id}/agenda-items/order.
       required:
         - id
         - text
@@ -1067,17 +1105,17 @@ components:
           type: string
           example: Об институте AIRI и видении применения ИИ в науке
         speaker:
-          $ref: '#/components/schemas/Participant'
+          $ref: '#/components/schemas/Person'
 
     MeetingCreate:
       type: object
-      description: Payload for creating a new meeting.
+      description: >
+        Payload for creating a new meeting. Only title and date are required.
+        The meeting is created with status "incomplete" — add people, set a
+        chairperson, and add agenda items via dedicated endpoints.
       required:
         - title
         - date
-        - chairperson_id
-        - agenda_items
-        - participant_ids
       properties:
         title:
           type: string
@@ -1092,42 +1130,17 @@ components:
             Date and time of the meeting (UTC, ISO 8601).
             Rendered as a localised date/time string in document headers.
           example: '2026-02-26T11:00:00Z'
-        chairperson_id:
-          type: integer
-          description: >
-            ID of the person chairing the meeting (председательствующий).
-            Their name and role appear in the header of both exported documents.
-            Must also be present in participant_ids.
-          example: 42
-        agenda_items:
-          type: array
-          description: Ordered list of agenda points, each with a speaker
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/AgendaItemCreate'
-        participant_ids:
-          type: array
-          description: >
-            IDs of all participants listed in the Список участников.
-            Must include chairperson_id and all speaker_ids from agenda_items.
-            Each ID must exist in the database.
-          minItems: 1
-          items:
-            type: integer
-          example:
-            - 42
-            - 17
 
     Meeting:
       type: object
-      description: A fully created meeting record returned by the server.
+      description: A meeting record returned by the server.
       required:
         - id
         - title
         - date
-        - chairperson
         - agenda_items
-        - participants
+        - people
+        - status
         - created_at
       properties:
         id:
@@ -1145,22 +1158,29 @@ components:
           description: Date and time of the meeting (UTC, ISO 8601)
           example: '2026-02-26T11:00:00Z'
         chairperson:
-          description: Resolved chairperson object
+          description: Resolved chairperson object (null if not yet set)
+          nullable: true
           allOf:
-            - $ref: '#/components/schemas/Participant'
+            - $ref: '#/components/schemas/Person'
         agenda_items:
           type: array
           description: Ordered agenda items with resolved speaker objects
           items:
             $ref: '#/components/schemas/AgendaItem'
-        participants:
+        people:
           type: array
           description: >
-            Full participant objects for the Список участников,
-            in their current display order (can be changed via
-            PUT /meetings/{id}/participants/order).
+            People in this meeting in their current display order
+            (can be changed via PUT /meetings/{id}/people/order).
           items:
-            $ref: '#/components/schemas/Participant'
+            $ref: '#/components/schemas/Person'
+        status:
+          type: string
+          enum: [incomplete, complete]
+          description: >
+            incomplete — chairperson not set, or no people, or no agenda items.
+            complete — all three are present.
+          example: incomplete
         created_at:
           type: string
           format: date-time
@@ -1189,19 +1209,19 @@ components:
             - 1
             - 2
 
-    ParticipantOrder:
+    PersonOrder:
       type: object
       description: >
-        Payload for reordering participants within a meeting.
+        Payload for reordering people within a meeting.
         Must contain exactly the same IDs already attached to the meeting.
       required:
-        - participant_ids
+        - person_ids
       properties:
-        participant_ids:
+        person_ids:
           type: array
           description: >
-            All participant IDs of the meeting in the desired new order.
-            Must be the same set as the current participants — no additions
+            All person IDs of the meeting in the desired new order.
+            Must be the same set as the current people — no additions
             or removals, only reordering.
           minItems: 1
           items:
@@ -1213,12 +1233,8 @@ components:
     MeetingUpdate:
       type: object
       description: >
-        Payload for updating an existing meeting's title, date, and/or chairperson.
-        All fields are required — send the full desired state.
-      required:
-        - title
-        - date
-        - chairperson_id
+        Payload for partially updating an existing meeting's title and/or date.
+        Only fields present in the body are updated.
       properties:
         title:
           type: string
@@ -1229,28 +1245,36 @@ components:
           format: date-time
           description: New date and time of the meeting (UTC, ISO 8601)
           example: '2026-03-01T10:00:00Z'
-        chairperson_id:
+
+    SetChairperson:
+      type: object
+      description: Payload for setting or replacing the meeting chairperson.
+      required:
+        - person_id
+      properties:
+        person_id:
           type: integer
           description: >
-            ID of the new chairperson. Must already be a participant of this meeting.
-          example: 17
+            ID of the person to set as chairperson.
+            Must already be in the meeting's people list.
+          example: 42
 
-    AddMeetingParticipant:
+    AddMeetingPerson:
       type: object
-      description: Payload for adding a participant to an existing meeting.
+      description: Payload for adding a person to an existing meeting.
       required:
-        - participant_id
+        - person_id
       properties:
-        participant_id:
+        person_id:
           type: integer
-          description: ID of the participant to add to the meeting
+          description: ID of the person to add to the meeting
           example: 55
 
     AgendaItemUpsert:
       type: object
       description: >
         Payload for creating or updating an agenda item.
-        Used by both POST /meetings/{id}/agenda and PUT /meetings/{id}/agenda/{item_id}.
+        Used by both POST /meetings/{id}/agenda-items and PUT /meetings/{id}/agenda-items/{item_id}.
       required:
         - text
         - speaker_id
@@ -1262,8 +1286,8 @@ components:
         speaker_id:
           type: integer
           description: >
-            ID of the participant presenting this item (докладчик).
-            Must already be a participant of this meeting.
+            ID of the person presenting this item (докладчик).
+            Must already be in the meeting's people list.
           example: 42
 
     ErrorNotFound:
@@ -1276,12 +1300,12 @@ components:
 
     ErrorConflict:
       type: object
-      description: Conflict error — resource already exists.
+      description: Conflict error — resource already exists or constraint violated.
       properties:
         message:
           type: string
           description: Human-readable error summary
-          example: Participant already exists
+          example: Person already exists
         details:
           type: object
           description: Optional structured details, e.g. ID of the existing record
@@ -1296,12 +1320,12 @@ components:
         message:
           type: string
           description: Human-readable error summary
-          example: One or more participants not found
+          example: One or more person IDs not found
         details:
           type: object
           description: Optional structured details about what failed
           additionalProperties: true
           example:
-            invalid_participant_ids:
+            invalid_person_ids:
               - 99
               - 100

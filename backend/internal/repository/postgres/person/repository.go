@@ -1,4 +1,4 @@
-package participant
+package person
 
 import (
 	"context"
@@ -11,12 +11,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
-	"meetings-editor/internal/domain/participant"
+	"meetings-editor/internal/domain/person"
 	"meetings-editor/pkg/errs"
 	"meetings-editor/pkg/logger"
 )
-
-// pgx and errs are still used by Update, Delete, GetByIDs
 
 const (
 	queryCreate = `
@@ -28,6 +26,11 @@ const (
 		SELECT id, last_name, first_name, middle_name, info
 		FROM participants
 		ORDER BY last_name, first_name`
+
+	queryGetByID = `
+		SELECT id, last_name, first_name, middle_name, info
+		FROM participants
+		WHERE id = $1`
 
 	queryGetByIDs = `
 		SELECT id, last_name, first_name, middle_name, info
@@ -47,13 +50,13 @@ type repository struct {
 	db *pgxpool.Pool
 }
 
-func New(db *pgxpool.Pool) participant.Repository {
+func New(db *pgxpool.Pool) person.Repository {
 	return &repository{db: db}
 }
 
-func (r *repository) Create(ctx context.Context, p *participant.Participant) (*participant.Participant, error) {
+func (r *repository) Create(ctx context.Context, p *person.Person) (*person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: creating participant",
+	log.Info(ctx, "repo: creating person",
 		zap.String("last_name", p.LastName),
 		zap.String("first_name", p.FirstName),
 	)
@@ -63,28 +66,28 @@ func (r *repository) Create(ctx context.Context, p *participant.Participant) (*p
 		if isPgConflict(err) {
 			return nil, errs.ErrConflict
 		}
-		log.Error(ctx, "repo: failed to create participant", zap.Error(err))
+		log.Error(ctx, "repo: failed to create person", zap.Error(err))
 		return nil, err
 	}
 
-	log.Info(ctx, "repo: participant created", zap.Int("id", p.ID))
+	log.Info(ctx, "repo: person created", zap.Int("id", p.ID))
 	return p, nil
 }
 
-func (r *repository) GetAll(ctx context.Context) ([]participant.Participant, error) {
+func (r *repository) GetAll(ctx context.Context) ([]person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: get all participants")
+	log.Info(ctx, "repo: get all people")
 
 	rows, err := r.db.Query(ctx, queryGetAll)
 	if err != nil {
-		log.Error(ctx, "repo: failed to get all participants", zap.Error(err))
+		log.Error(ctx, "repo: failed to get all people", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []participant.Participant
+	var result []person.Person
 	for rows.Next() {
-		var p participant.Participant
+		var p person.Person
 		if err := rows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
 			return nil, err
 		}
@@ -93,9 +96,9 @@ func (r *repository) GetAll(ctx context.Context) ([]participant.Participant, err
 	return result, rows.Err()
 }
 
-func (r *repository) Search(ctx context.Context, words []string) ([]participant.Participant, error) {
+func (r *repository) Search(ctx context.Context, words []string) ([]person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: search participants", zap.Int("words", len(words)))
+	log.Info(ctx, "repo: search people", zap.Int("words", len(words)))
 
 	var sb strings.Builder
 	sb.WriteString(`SELECT id, last_name, first_name, middle_name, info FROM participants WHERE `)
@@ -112,14 +115,14 @@ func (r *repository) Search(ctx context.Context, words []string) ([]participant.
 
 	rows, err := r.db.Query(ctx, sb.String(), args...)
 	if err != nil {
-		log.Error(ctx, "repo: failed to search participants", zap.Error(err))
+		log.Error(ctx, "repo: failed to search people", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []participant.Participant
+	var result []person.Person
 	for rows.Next() {
-		var p participant.Participant
+		var p person.Person
 		if err := rows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
 			return nil, err
 		}
@@ -128,20 +131,37 @@ func (r *repository) Search(ctx context.Context, words []string) ([]participant.
 	return result, rows.Err()
 }
 
-func (r *repository) GetByIDs(ctx context.Context, ids []int) ([]participant.Participant, error) {
+func (r *repository) GetByID(ctx context.Context, id int) (*person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: get participants by IDs", zap.Int("count", len(ids)))
+	log.Info(ctx, "repo: get person by id", zap.Int("id", id))
+
+	var p person.Person
+	err := r.db.QueryRow(ctx, queryGetByID, id).
+		Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errs.ErrNotFound
+		}
+		log.Error(ctx, "repo: failed to get person by id", zap.Error(err))
+		return nil, err
+	}
+	return &p, nil
+}
+
+func (r *repository) GetByIDs(ctx context.Context, ids []int) ([]person.Person, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "repo: get people by IDs", zap.Int("count", len(ids)))
 
 	rows, err := r.db.Query(ctx, queryGetByIDs, ids)
 	if err != nil {
-		log.Error(ctx, "repo: failed to query participants by IDs", zap.Error(err))
+		log.Error(ctx, "repo: failed to query people by IDs", zap.Error(err))
 		return nil, err
 	}
 	defer rows.Close()
 
-	var result []participant.Participant
+	var result []person.Person
 	for rows.Next() {
-		var p participant.Participant
+		var p person.Person
 		if err := rows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
 			return nil, err
 		}
@@ -150,11 +170,11 @@ func (r *repository) GetByIDs(ctx context.Context, ids []int) ([]participant.Par
 	return result, rows.Err()
 }
 
-func (r *repository) Update(ctx context.Context, p *participant.Participant) (*participant.Participant, error) {
+func (r *repository) Update(ctx context.Context, p *person.Person) (*person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: updating participant", zap.Int("id", p.ID))
+	log.Info(ctx, "repo: updating person", zap.Int("id", p.ID))
 
-	updated := &participant.Participant{}
+	updated := &person.Person{}
 	err := r.db.QueryRow(ctx, queryUpdate, p.LastName, p.FirstName, p.MiddleName, p.Info, p.ID).
 		Scan(&updated.ID, &updated.LastName, &updated.FirstName, &updated.MiddleName, &updated.Info)
 	if err != nil {
@@ -164,7 +184,7 @@ func (r *repository) Update(ctx context.Context, p *participant.Participant) (*p
 		if isPgConflict(err) {
 			return nil, errs.ErrConflict
 		}
-		log.Error(ctx, "repo: failed to update participant", zap.Error(err))
+		log.Error(ctx, "repo: failed to update person", zap.Error(err))
 		return nil, err
 	}
 
@@ -173,14 +193,14 @@ func (r *repository) Update(ctx context.Context, p *participant.Participant) (*p
 
 func (r *repository) Delete(ctx context.Context, id int) error {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: deleting participant", zap.Int("id", id))
+	log.Info(ctx, "repo: deleting person", zap.Int("id", id))
 
 	tag, err := r.db.Exec(ctx, queryDelete, id)
 	if err != nil {
 		if isFKViolation(err) {
 			return errs.ErrConflict
 		}
-		log.Error(ctx, "repo: failed to delete participant", zap.Error(err))
+		log.Error(ctx, "repo: failed to delete person", zap.Error(err))
 		return err
 	}
 

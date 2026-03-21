@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	domMeeting "meetings-editor/internal/domain/meeting"
-	"meetings-editor/internal/domain/participant"
+	"meetings-editor/internal/domain/person"
 	"meetings-editor/pkg/errs"
 	"meetings-editor/pkg/logger"
 )
@@ -16,35 +16,26 @@ import (
 
 // CreateRequest is the service-level input for creating a meeting.
 type CreateRequest struct {
-	Title          string
-	Date           time.Time
-	ChairpersonID  int
-	AgendaItems    []AgendaItemRequest
-	ParticipantIDs []int
-}
-
-type AgendaItemRequest struct {
-	Text      string
-	SpeakerID int
+	Title string
+	Date  time.Time
 }
 
 // UpdateRequest is the service-level input for updating meeting metadata.
 type UpdateRequest struct {
-	Title         string
-	Date          time.Time
-	ChairpersonID int
+	Title string
+	Date  time.Time
 }
 
 // --- error types ---
 
 type ErrInvalidIDs struct{ IDs []int }
 
-func (e *ErrInvalidIDs) Error() string { return "one or more participant IDs not found" }
+func (e *ErrInvalidIDs) Error() string { return "one or more person IDs not found" }
 
-type ErrParticipantSetMismatch struct{}
+type ErrPersonSetMismatch struct{}
 
-func (e *ErrParticipantSetMismatch) Error() string {
-	return "participant IDs must exactly match the meeting's current participants"
+func (e *ErrPersonSetMismatch) Error() string {
+	return "person IDs must exactly match the meeting's current people"
 }
 
 type ErrAgendaItemSetMismatch struct{}
@@ -56,31 +47,37 @@ func (e *ErrAgendaItemSetMismatch) Error() string {
 type ErrChairpersonNotInMeeting struct{}
 
 func (e *ErrChairpersonNotInMeeting) Error() string {
-	return "new chairperson must be a participant of this meeting"
+	return "chairperson must be a person in this meeting"
 }
 
 type ErrChairpersonRemoval struct{}
 
 func (e *ErrChairpersonRemoval) Error() string {
-	return "participant is the chairperson — update chairperson before removing"
+	return "person is the chairperson — update chairperson before removing"
 }
 
 type ErrSpeakerRemoval struct{}
 
 func (e *ErrSpeakerRemoval) Error() string {
-	return "participant is a speaker on one or more agenda items — remove or reassign first"
+	return "person is a speaker on one or more agenda items — remove or reassign first"
 }
 
-type ErrParticipantAlreadyInMeeting struct{}
+type ErrPersonAlreadyInMeeting struct{}
 
-func (e *ErrParticipantAlreadyInMeeting) Error() string {
-	return "participant is already in this meeting"
+func (e *ErrPersonAlreadyInMeeting) Error() string {
+	return "person is already in this meeting"
 }
 
 type ErrSpeakerNotInMeeting struct{}
 
 func (e *ErrSpeakerNotInMeeting) Error() string {
-	return "speaker must be a participant of this meeting"
+	return "speaker must be a person in this meeting"
+}
+
+type ErrMeetingIncomplete struct{}
+
+func (e *ErrMeetingIncomplete) Error() string {
+	return "meeting is incomplete — set chairperson, add people, and add agenda items before exporting"
 }
 
 // --- service interface ---
@@ -90,23 +87,24 @@ type Service interface {
 	GetByID(ctx context.Context, id string) (*domMeeting.Meeting, error)
 	Create(ctx context.Context, req *CreateRequest) (*domMeeting.Meeting, error)
 	Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error)
+	SetChairperson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
 	Delete(ctx context.Context, id string) error
-	ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error
+	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
-	AddParticipant(ctx context.Context, meetingID string, participantID int) (*domMeeting.Meeting, error)
-	RemoveParticipant(ctx context.Context, meetingID string, participantID int) (*domMeeting.Meeting, error)
+	AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
+	RemovePerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
 	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (*domMeeting.Meeting, error)
 	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) (*domMeeting.Meeting, error)
 	DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) (*domMeeting.Meeting, error)
 }
 
 type service struct {
-	repo            domMeeting.Repository
-	participantRepo participant.Repository
+	repo       domMeeting.Repository
+	personRepo person.Repository
 }
 
-func New(repo domMeeting.Repository, participantRepo participant.Repository) Service {
-	return &service{repo: repo, participantRepo: participantRepo}
+func New(repo domMeeting.Repository, personRepo person.Repository) Service {
+	return &service{repo: repo, personRepo: personRepo}
 }
 
 func (s *service) GetAll(ctx context.Context, limit, offset int) ([]domMeeting.Meeting, int, error) {
@@ -125,64 +123,29 @@ func (s *service) Create(ctx context.Context, req *CreateRequest) (*domMeeting.M
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "service: creating meeting", zap.String("title", req.Title))
 
-	idSet := map[int]struct{}{req.ChairpersonID: {}}
-	for _, id := range req.ParticipantIDs {
-		idSet[id] = struct{}{}
-	}
-	for _, item := range req.AgendaItems {
-		idSet[item.SpeakerID] = struct{}{}
-	}
-	allIDs := make([]int, 0, len(idSet))
-	for id := range idSet {
-		allIDs = append(allIDs, id)
-	}
-
-	found, err := s.participantRepo.GetByIDs(ctx, allIDs)
-	if err != nil {
-		return nil, err
-	}
-
-	lookup := make(map[int]participant.Participant, len(found))
-	for _, p := range found {
-		lookup[p.ID] = p
-	}
-	var missing []int
-	for _, id := range allIDs {
-		if _, ok := lookup[id]; !ok {
-			missing = append(missing, id)
-		}
-	}
-	if len(missing) > 0 {
-		return nil, &ErrInvalidIDs{IDs: missing}
-	}
-
 	m := &domMeeting.Meeting{
-		Title:       req.Title,
-		Date:        req.Date,
-		Chairperson: lookup[req.ChairpersonID],
+		Title: req.Title,
+		Date:  req.Date,
 	}
-	for _, item := range req.AgendaItems {
-		m.AgendaItems = append(m.AgendaItems, domMeeting.AgendaItem{
-			Text:    item.Text,
-			Speaker: lookup[item.SpeakerID],
-		})
-	}
-	for _, id := range req.ParticipantIDs {
-		m.Participants = append(m.Participants, lookup[id])
-	}
-
 	return s.repo.Create(ctx, m)
 }
 
 func (s *service) Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error) {
+	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) SetChairperson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error) {
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return nil, err
 	}
 
 	found := false
-	for _, p := range m.Participants {
-		if p.ID == req.ChairpersonID {
+	for _, p := range m.People {
+		if p.ID == personID {
 			found = true
 			break
 		}
@@ -191,7 +154,7 @@ func (s *service) Update(ctx context.Context, meetingID string, req *UpdateReque
 		return nil, &ErrChairpersonNotInMeeting{}
 	}
 
-	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date, req.ChairpersonID); err != nil {
+	if err := s.repo.SetChairperson(ctx, meetingID, personID); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)
@@ -201,29 +164,29 @@ func (s *service) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func (s *service) ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error {
+func (s *service) ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "service: reorder participants", zap.String("meeting_id", meetingID))
+	log.Info(ctx, "service: reorder people", zap.String("meeting_id", meetingID))
 
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return err
 	}
 
-	if len(participantIDs) != len(m.Participants) {
-		return &ErrParticipantSetMismatch{}
+	if len(personIDs) != len(m.People) {
+		return &ErrPersonSetMismatch{}
 	}
-	existing := make(map[int]struct{}, len(m.Participants))
-	for _, p := range m.Participants {
+	existing := make(map[int]struct{}, len(m.People))
+	for _, p := range m.People {
 		existing[p.ID] = struct{}{}
 	}
-	for _, id := range participantIDs {
+	for _, id := range personIDs {
 		if _, ok := existing[id]; !ok {
-			return &ErrParticipantSetMismatch{}
+			return &ErrPersonSetMismatch{}
 		}
 	}
 
-	return s.repo.ReorderParticipants(ctx, meetingID, participantIDs)
+	return s.repo.ReorderPeople(ctx, meetingID, personIDs)
 }
 
 func (s *service) ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error {
@@ -251,47 +214,47 @@ func (s *service) ReorderAgendaItems(ctx context.Context, meetingID string, agen
 	return s.repo.ReorderAgendaItems(ctx, meetingID, agendaItemIDs)
 }
 
-func (s *service) AddParticipant(ctx context.Context, meetingID string, participantID int) (*domMeeting.Meeting, error) {
-	participants, err := s.participantRepo.GetByIDs(ctx, []int{participantID})
+func (s *service) AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error) {
+	people, err := s.personRepo.GetByIDs(ctx, []int{personID})
 	if err != nil {
 		return nil, err
 	}
-	if len(participants) == 0 {
-		return nil, &ErrInvalidIDs{IDs: []int{participantID}}
+	if len(people) == 0 {
+		return nil, &ErrInvalidIDs{IDs: []int{personID}}
 	}
 
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range m.Participants {
-		if p.ID == participantID {
-			return nil, &ErrParticipantAlreadyInMeeting{}
+	for _, p := range m.People {
+		if p.ID == personID {
+			return nil, &ErrPersonAlreadyInMeeting{}
 		}
 	}
 
-	if err := s.repo.AddParticipant(ctx, meetingID, participantID); err != nil {
+	if err := s.repo.AddPerson(ctx, meetingID, personID); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)
 }
 
-func (s *service) RemoveParticipant(ctx context.Context, meetingID string, participantID int) (*domMeeting.Meeting, error) {
+func (s *service) RemovePerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error) {
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return nil, err
 	}
 
-	if m.Chairperson.ID == participantID {
+	if m.Chairperson != nil && m.Chairperson.ID == personID {
 		return nil, &ErrChairpersonRemoval{}
 	}
 	for _, item := range m.AgendaItems {
-		if item.Speaker.ID == participantID {
+		if item.Speaker.ID == personID {
 			return nil, &ErrSpeakerRemoval{}
 		}
 	}
 
-	if err := s.repo.RemoveParticipant(ctx, meetingID, participantID); err != nil {
+	if err := s.repo.RemovePerson(ctx, meetingID, personID); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)
@@ -304,7 +267,7 @@ func (s *service) AddAgendaItem(ctx context.Context, meetingID string, text stri
 	}
 
 	found := false
-	for _, p := range m.Participants {
+	for _, p := range m.People {
 		if p.ID == speakerID {
 			found = true
 			break
@@ -338,7 +301,7 @@ func (s *service) UpdateAgendaItem(ctx context.Context, meetingID string, itemID
 	}
 
 	speakerFound := false
-	for _, p := range m.Participants {
+	for _, p := range m.People {
 		if p.ID == speakerID {
 			speakerFound = true
 			break

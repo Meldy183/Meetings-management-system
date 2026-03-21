@@ -2,54 +2,54 @@ package model
 
 import "time"
 
-// ParticipantCreateRequest implement me
 // Request models
-type ParticipantCreateRequest struct {
+
+type PersonCreateRequest struct {
 	LastName   string `json:"last_name"`
 	FirstName  string `json:"first_name"`
 	MiddleName string `json:"middle_name,omitempty"`
 	Info       string `json:"info,omitempty"`
 }
-type AgendaItemCreateRequest struct {
-	Text      string `json:"text"`
-	SpeakerID int    `json:"speaker_id"`
-}
+
 type MeetingCreateRequest struct {
-	Title          string                    `json:"title"`
-	Date           time.Time                 `json:"date"`
-	ChairpersonID  int                       `json:"chairperson_id"`
-	AgendaItems    []AgendaItemCreateRequest `json:"agenda_items"`
-	ParticipantIDs []int                     `json:"participant_ids"`
+	Title string    `json:"title"`
+	Date  time.Time `json:"date"`
 }
 
-// ParticipantResponse Response models
-type ParticipantResponse struct {
+// Response models
+
+type PersonResponse struct {
 	ID         int    `json:"id"`
 	LastName   string `json:"last_name"`
 	FirstName  string `json:"first_name"`
 	MiddleName string `json:"middle_name,omitempty"`
 	Info       string `json:"info,omitempty"`
 }
+
 type AgendaItemResponse struct {
-	ID      int                 `json:"id"`
-	Text    string              `json:"text"`
-	Speaker ParticipantResponse `json:"speaker"`
+	ID      int            `json:"id"`
+	Text    string         `json:"text"`
+	Speaker PersonResponse `json:"speaker"`
 }
+
 type MeetingResponse struct {
-	ID           string                `json:"id"`
-	Title        string                `json:"title"`
-	Date         time.Time             `json:"date"`
-	Chairperson  ParticipantResponse   `json:"chairperson"`
-	AgendaItems  []AgendaItemResponse  `json:"agenda_items"`
-	Participants []ParticipantResponse `json:"participants"`
-	CreatedAt    time.Time             `json:"created_at"`
+	ID          string               `json:"id"`
+	Title       string               `json:"title"`
+	Date        time.Time            `json:"date"`
+	Chairperson *PersonResponse      `json:"chairperson"`
+	AgendaItems []AgendaItemResponse `json:"agenda_items"`
+	People      []PersonResponse     `json:"people"`
+	Status      string               `json:"status"`
+	CreatedAt   time.Time            `json:"created_at"`
 }
+
 type MeetingSummaryResponse struct {
-	ID          string             `json:"id"`
-	Title       string             `json:"title"`
-	Date        time.Time          `json:"date"`
-	Chairperson ParticipantResponse `json:"chairperson"`
-	CreatedAt   time.Time          `json:"created_at"`
+	ID          string          `json:"id"`
+	Title       string          `json:"title"`
+	Date        time.Time       `json:"date"`
+	Chairperson *PersonResponse `json:"chairperson"`
+	Status      string          `json:"status"`
+	CreatedAt   time.Time       `json:"created_at"`
 }
 
 type MeetingListResponse struct {
@@ -58,8 +58,9 @@ type MeetingListResponse struct {
 	Offset int                      `json:"offset"`
 	Items  []MeetingSummaryResponse `json:"items"`
 }
-type ReorderParticipantsRequest struct {
-	ParticipantIDs []int `json:"participant_ids"`
+
+type ReorderPeopleRequest struct {
+	PersonIDs []int `json:"person_ids"`
 }
 
 type ReorderAgendaItemsRequest struct {
@@ -67,13 +68,16 @@ type ReorderAgendaItemsRequest struct {
 }
 
 type MeetingUpdateRequest struct {
-	Title         string    `json:"title"`
-	Date          time.Time `json:"date"`
-	ChairpersonID int       `json:"chairperson_id"`
+	Title string    `json:"title"`
+	Date  time.Time `json:"date"`
 }
 
-type AddMeetingParticipantRequest struct {
-	ParticipantID int `json:"participant_id"`
+type SetChairpersonRequest struct {
+	PersonID int `json:"person_id"`
+}
+
+type AddMeetingPersonRequest struct {
+	PersonID int `json:"person_id"`
 }
 
 type AgendaItemUpsertRequest struct {

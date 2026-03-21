@@ -17,9 +17,9 @@ import (
 	"meetings-editor/config"
 	"meetings-editor/internal/docx"
 	repoMeeting "meetings-editor/internal/repository/postgres/meeting"
-	repoParticipant "meetings-editor/internal/repository/postgres/participant"
+	repoPerson "meetings-editor/internal/repository/postgres/person"
 	svcMeeting "meetings-editor/internal/service/meeting"
-	svcParticipant "meetings-editor/internal/service/participant"
+	svcPerson "meetings-editor/internal/service/person"
 	"meetings-editor/internal/transport/http/handler"
 	"meetings-editor/internal/transport/http/middleware"
 	"meetings-editor/pkg/logger"
@@ -48,18 +48,18 @@ func main() {
 	}
 
 	// Repositories
-	participantRepo := repoParticipant.New(pool)
+	personRepo := repoPerson.New(pool)
 	meetingRepo := repoMeeting.New(pool)
 
 	// Services
-	participantSvc := svcParticipant.New(participantRepo)
-	meetingSvc := svcMeeting.New(meetingRepo, participantRepo)
+	personSvc := svcPerson.New(personRepo)
+	meetingSvc := svcMeeting.New(meetingRepo, personRepo)
 
 	// Export
 	exportGen := docx.New()
 
 	// Handlers
-	ph := handler.NewParticipantHandler(participantSvc)
+	ph := handler.NewPersonHandler(personSvc)
 	mh := handler.NewMeetingHandler(meetingSvc, exportGen)
 
 	// Router (Go 1.22+ method+path patterns)
@@ -70,23 +70,25 @@ func main() {
 		fmt.Fprintln(w, "ok")
 	})
 
-	mux.HandleFunc("GET /participants", ph.List)
-	mux.HandleFunc("POST /participants", ph.Create)
-	mux.HandleFunc("PUT /participants/{id}", ph.Update)
-	mux.HandleFunc("DELETE /participants/{id}", ph.Delete)
+	mux.HandleFunc("GET /people", ph.List)
+	mux.HandleFunc("POST /people", ph.Create)
+	mux.HandleFunc("GET /people/{id}", ph.GetByID)
+	mux.HandleFunc("PATCH /people/{id}", ph.Update)
+	mux.HandleFunc("DELETE /people/{id}", ph.Delete)
 
 	mux.HandleFunc("GET /meetings", mh.List)
 	mux.HandleFunc("POST /meetings", mh.Create)
 	mux.HandleFunc("GET /meetings/{id}", mh.GetByID)
-	mux.HandleFunc("PUT /meetings/{id}", mh.Update)
+	mux.HandleFunc("PATCH /meetings/{id}", mh.Update)
 	mux.HandleFunc("DELETE /meetings/{id}", mh.Delete)
-	mux.HandleFunc("POST /meetings/{id}/participants", mh.AddParticipant)
-	mux.HandleFunc("DELETE /meetings/{id}/participants/{pid}", mh.RemoveParticipant)
-	mux.HandleFunc("PUT /meetings/{id}/participants/order", mh.ReorderParticipants)
-	mux.HandleFunc("POST /meetings/{id}/agenda", mh.AddAgendaItem)
-	mux.HandleFunc("PUT /meetings/{id}/agenda/{item_id}", mh.UpdateAgendaItem)
-	mux.HandleFunc("DELETE /meetings/{id}/agenda/{item_id}", mh.DeleteAgendaItem)
-	mux.HandleFunc("PUT /meetings/{id}/agenda/order", mh.ReorderAgendaItems)
+	mux.HandleFunc("PUT /meetings/{id}/chairperson", mh.SetChairperson)
+	mux.HandleFunc("POST /meetings/{id}/people", mh.AddPerson)
+	mux.HandleFunc("DELETE /meetings/{id}/people/{pid}", mh.RemovePerson)
+	mux.HandleFunc("PUT /meetings/{id}/people/order", mh.ReorderPeople)
+	mux.HandleFunc("POST /meetings/{id}/agenda-items", mh.AddAgendaItem)
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}", mh.UpdateAgendaItem)
+	mux.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}", mh.DeleteAgendaItem)
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/order", mh.ReorderAgendaItems)
 	mux.HandleFunc("GET /meetings/{id}/export/agenda", mh.ExportAgenda)
 	mux.HandleFunc("GET /meetings/{id}/export/participants", mh.ExportParticipants)
 

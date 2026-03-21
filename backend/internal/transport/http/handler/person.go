@@ -7,47 +7,67 @@ import (
 	"strconv"
 	"strings"
 
-	"meetings-editor/internal/domain/participant"
-	svcParticipant "meetings-editor/internal/service/participant"
+	"meetings-editor/internal/domain/person"
+	svcPerson "meetings-editor/internal/service/person"
 	"meetings-editor/internal/transport/http/model"
 	"meetings-editor/pkg/errs"
 )
 
-
-type ParticipantHandler struct {
-	svc svcParticipant.Service
+type PersonHandler struct {
+	svc svcPerson.Service
 }
 
-func NewParticipantHandler(svc svcParticipant.Service) *ParticipantHandler {
-	return &ParticipantHandler{svc: svc}
+func NewPersonHandler(svc svcPerson.Service) *PersonHandler {
+	return &PersonHandler{svc: svc}
 }
 
-// GET /participants?q=...
-func (h *ParticipantHandler) List(w http.ResponseWriter, r *http.Request) {
+// GET /people?q=...
+func (h *PersonHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 
-	var participants []participant.Participant
+	var people []person.Person
 	var err error
 	if q == "" {
-		participants, err = h.svc.GetAll(r.Context())
+		people, err = h.svc.GetAll(r.Context())
 	} else {
-		participants, err = h.svc.Search(r.Context(), q)
+		people, err = h.svc.Search(r.Context(), q)
 	}
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
 
-	resp := make([]model.ParticipantResponse, 0, len(participants))
-	for i := range participants {
-		resp = append(resp, toParticipantResponse(&participants[i]))
+	resp := make([]model.PersonResponse, 0, len(people))
+	for i := range people {
+		resp = append(resp, toPersonResponse(&people[i]))
 	}
 	respond(w, http.StatusOK, resp)
 }
 
-// POST /participants
-func (h *ParticipantHandler) Create(w http.ResponseWriter, r *http.Request) {
-	var req model.ParticipantCreateRequest
+// GET /people/{id}
+func (h *PersonHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid person id", nil)
+		return
+	}
+
+	p, err := h.svc.GetByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "person not found", nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+
+	respond(w, http.StatusOK, toPersonResponse(p))
+}
+
+// POST /people
+func (h *PersonHandler) Create(w http.ResponseWriter, r *http.Request) {
+	var req model.PersonCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
@@ -58,7 +78,7 @@ func (h *ParticipantHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &participant.Participant{
+	p := &person.Person{
 		LastName:   req.LastName,
 		FirstName:  req.FirstName,
 		MiddleName: req.MiddleName,
@@ -68,25 +88,25 @@ func (h *ParticipantHandler) Create(w http.ResponseWriter, r *http.Request) {
 	created, err := h.svc.Create(r.Context(), p)
 	if err != nil {
 		if errors.Is(err, errs.ErrConflict) {
-			respondError(w, http.StatusConflict, "participant already exists", nil)
+			respondError(w, http.StatusConflict, "person already exists", nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
 
-	respond(w, http.StatusCreated, toParticipantResponse(created))
+	respond(w, http.StatusCreated, toPersonResponse(created))
 }
 
-// PUT /participants/{id}
-func (h *ParticipantHandler) Update(w http.ResponseWriter, r *http.Request) {
+// PATCH /people/{id}
+func (h *PersonHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid participant id", nil)
+		respondError(w, http.StatusBadRequest, "invalid person id", nil)
 		return
 	}
 
-	var req model.ParticipantCreateRequest
+	var req model.PersonCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
@@ -97,7 +117,7 @@ func (h *ParticipantHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p := &participant.Participant{
+	p := &person.Person{
 		ID:         id,
 		LastName:   req.LastName,
 		FirstName:  req.FirstName,
@@ -108,35 +128,35 @@ func (h *ParticipantHandler) Update(w http.ResponseWriter, r *http.Request) {
 	updated, err := h.svc.Update(r.Context(), p)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "participant not found", nil)
+			respondError(w, http.StatusNotFound, "person not found", nil)
 			return
 		}
 		if errors.Is(err, errs.ErrConflict) {
-			respondError(w, http.StatusConflict, "participant with this name already exists", nil)
+			respondError(w, http.StatusConflict, "person with this name already exists", nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
 
-	respond(w, http.StatusOK, toParticipantResponse(updated))
+	respond(w, http.StatusOK, toPersonResponse(updated))
 }
 
-// DELETE /participants/{id}
-func (h *ParticipantHandler) Delete(w http.ResponseWriter, r *http.Request) {
+// DELETE /people/{id}
+func (h *PersonHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid participant id", nil)
+		respondError(w, http.StatusBadRequest, "invalid person id", nil)
 		return
 	}
 
 	if err := h.svc.Delete(r.Context(), id); err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "participant not found", nil)
+			respondError(w, http.StatusNotFound, "person not found", nil)
 			return
 		}
 		if errors.Is(err, errs.ErrConflict) {
-			respondError(w, http.StatusConflict, "participant is referenced in existing meetings", nil)
+			respondError(w, http.StatusConflict, "person is referenced in existing meetings", nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
@@ -146,8 +166,8 @@ func (h *ParticipantHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func toParticipantResponse(p *participant.Participant) model.ParticipantResponse {
-	return model.ParticipantResponse{
+func toPersonResponse(p *person.Person) model.PersonResponse {
+	return model.PersonResponse{
 		ID:         p.ID,
 		LastName:   p.LastName,
 		FirstName:  p.FirstName,

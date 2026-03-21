@@ -10,15 +10,15 @@ import (
 	"go.uber.org/zap"
 
 	"meetings-editor/internal/domain/meeting"
-	"meetings-editor/internal/domain/participant"
+	"meetings-editor/internal/domain/person"
 	"meetings-editor/pkg/errs"
 	"meetings-editor/pkg/logger"
 )
 
 const (
 	queryInsertMeeting = `
-		INSERT INTO meetings (title, date, chairperson_id)
-		VALUES ($1, $2, $3)
+		INSERT INTO meetings (title, date)
+		VALUES ($1, $2)
 		RETURNING id, created_at`
 
 	queryInsertAgendaItem = `
@@ -36,7 +36,7 @@ const (
 		SELECT m.id, m.title, m.date, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meetings m
-		JOIN participants p ON p.id = m.chairperson_id
+		LEFT JOIN participants p ON p.id = m.chairperson_id
 		ORDER BY m.date DESC
 		LIMIT $1 OFFSET $2`
 
@@ -44,7 +44,7 @@ const (
 		SELECT m.id, m.title, m.date, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meetings m
-		JOIN participants p ON p.id = m.chairperson_id
+		LEFT JOIN participants p ON p.id = m.chairperson_id
 		WHERE m.id = $1`
 
 	queryGetAgendaItems = `
@@ -54,14 +54,14 @@ const (
 		WHERE ai.meeting_id = $1
 		ORDER BY ai.position`
 
-	queryGetMeetingParticipants = `
+	queryGetMeetingPeople = `
 		SELECT p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meeting_participants mp
 		JOIN participants p ON p.id = mp.participant_id
 		WHERE mp.meeting_id = $1
 		ORDER BY mp.position`
 
-	queryUpdateParticipantPosition = `
+	queryUpdatePersonPosition = `
 		UPDATE meeting_participants SET position = $3
 		WHERE meeting_id = $1 AND participant_id = $2`
 
@@ -70,17 +70,21 @@ const (
 		WHERE id = $1 AND meeting_id = $3`
 
 	queryUpdateMeeting = `
-		UPDATE meetings SET title = $2, date = $3, chairperson_id = $4
+		UPDATE meetings SET title = $2, date = $3
+		WHERE id = $1`
+
+	querySetChairperson = `
+		UPDATE meetings SET chairperson_id = $2
 		WHERE id = $1`
 
 	queryDeleteMeeting = `DELETE FROM meetings WHERE id = $1`
 
-	queryAddMeetingParticipant = `
+	queryAddMeetingPerson = `
 		INSERT INTO meeting_participants (meeting_id, participant_id, position)
 		VALUES ($1, $2,
 		  (SELECT COALESCE(MAX(position), -1) + 1 FROM meeting_participants WHERE meeting_id = $1))`
 
-	queryRemoveMeetingParticipant = `
+	queryRemoveMeetingPerson = `
 		DELETE FROM meeting_participants WHERE meeting_id = $1 AND participant_id = $2`
 
 	queryAddAgendaItem = `
@@ -106,6 +110,20 @@ func New(db *pgxpool.Pool) meeting.Repository {
 	return &repository{db: db}
 }
 
+// scanChairperson scans the nullable chairperson columns into a *person.Person.
+func scanChairperson(id *int, lastName, firstName, middleName, info *string) *person.Person {
+	if id == nil {
+		return nil
+	}
+	return &person.Person{
+		ID:         *id,
+		LastName:   *lastName,
+		FirstName:  *firstName,
+		MiddleName: *middleName,
+		Info:       *info,
+	}
+}
+
 func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.Meeting, int, error) {
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "repo: list meetings", zap.Int("limit", limit), zap.Int("offset", offset))
@@ -126,15 +144,16 @@ func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.M
 	var meetings []meeting.Meeting
 	for rows.Next() {
 		var m meeting.Meeting
-		var chair participant.Participant
+		var cID *int
+		var cLast, cFirst, cMiddle, cInfo *string
 		err := rows.Scan(
 			&m.ID, &m.Title, &m.Date, &m.CreatedAt,
-			&chair.ID, &chair.LastName, &chair.FirstName, &chair.MiddleName, &chair.Info,
+			&cID, &cLast, &cFirst, &cMiddle, &cInfo,
 		)
 		if err != nil {
 			return nil, 0, err
 		}
-		m.Chairperson = chair
+		m.Chairperson = scanChairperson(cID, cLast, cFirst, cMiddle, cInfo)
 		meetings = append(meetings, m)
 	}
 	if err := rows.Err(); err != nil {
@@ -149,10 +168,11 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	log.Info(ctx, "repo: get meeting by id", zap.String("id", id))
 
 	var m meeting.Meeting
-	var chair participant.Participant
+	var cID *int
+	var cLast, cFirst, cMiddle, cInfo *string
 	err := r.db.QueryRow(ctx, queryGetMeeting, id).Scan(
 		&m.ID, &m.Title, &m.Date, &m.CreatedAt,
-		&chair.ID, &chair.LastName, &chair.FirstName, &chair.MiddleName, &chair.Info,
+		&cID, &cLast, &cFirst, &cMiddle, &cInfo,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -161,7 +181,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 		log.Error(ctx, "repo: failed to get meeting", zap.Error(err))
 		return nil, err
 	}
-	m.Chairperson = chair
+	m.Chairperson = scanChairperson(cID, cLast, cFirst, cMiddle, cInfo)
 
 	// Agenda items
 	aRows, err := r.db.Query(ctx, queryGetAgendaItems, id)
@@ -171,7 +191,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	defer aRows.Close()
 	for aRows.Next() {
 		var item meeting.AgendaItem
-		var spk participant.Participant
+		var spk person.Person
 		if err := aRows.Scan(&item.ID, &item.Text, &spk.ID, &spk.LastName, &spk.FirstName, &spk.MiddleName, &spk.Info); err != nil {
 			return nil, err
 		}
@@ -182,18 +202,18 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 		return nil, err
 	}
 
-	// Participants
-	pRows, err := r.db.Query(ctx, queryGetMeetingParticipants, id)
+	// People
+	pRows, err := r.db.Query(ctx, queryGetMeetingPeople, id)
 	if err != nil {
 		return nil, err
 	}
 	defer pRows.Close()
 	for pRows.Next() {
-		var p participant.Participant
+		var p person.Person
 		if err := pRows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
 			return nil, err
 		}
-		m.Participants = append(m.Participants, p)
+		m.People = append(m.People, p)
 	}
 	if err := pRows.Err(); err != nil {
 		return nil, err
@@ -202,9 +222,9 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	return &m, nil
 }
 
-func (r *repository) ReorderParticipants(ctx context.Context, meetingID string, participantIDs []int) error {
+func (r *repository) ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: reorder participants", zap.String("meeting_id", meetingID))
+	log.Info(ctx, "repo: reorder people", zap.String("meeting_id", meetingID))
 
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
@@ -212,9 +232,9 @@ func (r *repository) ReorderParticipants(ctx context.Context, meetingID string, 
 	}
 	defer tx.Rollback(ctx)
 
-	for i, pid := range participantIDs {
-		if _, err := tx.Exec(ctx, queryUpdateParticipantPosition, meetingID, pid, i); err != nil {
-			log.Error(ctx, "repo: failed to update participant position", zap.Error(err))
+	for i, pid := range personIDs {
+		if _, err := tx.Exec(ctx, queryUpdatePersonPosition, meetingID, pid, i); err != nil {
+			log.Error(ctx, "repo: failed to update person position", zap.Error(err))
 			return err
 		}
 	}
@@ -242,8 +262,19 @@ func (r *repository) ReorderAgendaItems(ctx context.Context, meetingID string, a
 	return tx.Commit(ctx)
 }
 
-func (r *repository) Update(ctx context.Context, id string, title string, date time.Time, chairpersonID int) error {
-	tag, err := r.db.Exec(ctx, queryUpdateMeeting, id, title, date, chairpersonID)
+func (r *repository) Update(ctx context.Context, id string, title string, date time.Time) error {
+	tag, err := r.db.Exec(ctx, queryUpdateMeeting, id, title, date)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
+}
+
+func (r *repository) SetChairperson(ctx context.Context, meetingID string, personID int) error {
+	tag, err := r.db.Exec(ctx, querySetChairperson, meetingID, personID)
 	if err != nil {
 		return err
 	}
@@ -264,13 +295,13 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *repository) AddParticipant(ctx context.Context, meetingID string, participantID int) error {
-	_, err := r.db.Exec(ctx, queryAddMeetingParticipant, meetingID, participantID)
+func (r *repository) AddPerson(ctx context.Context, meetingID string, personID int) error {
+	_, err := r.db.Exec(ctx, queryAddMeetingPerson, meetingID, personID)
 	return err
 }
 
-func (r *repository) RemoveParticipant(ctx context.Context, meetingID string, participantID int) error {
-	tag, err := r.db.Exec(ctx, queryRemoveMeetingParticipant, meetingID, participantID)
+func (r *repository) RemovePerson(ctx context.Context, meetingID string, personID int) error {
+	tag, err := r.db.Exec(ctx, queryRemoveMeetingPerson, meetingID, personID)
 	if err != nil {
 		return err
 	}
@@ -312,35 +343,10 @@ func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.M
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "repo: creating meeting", zap.String("title", m.Title))
 
-	tx, err := r.db.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	err = tx.QueryRow(ctx, queryInsertMeeting, m.Title, m.Date, m.Chairperson.ID).
+	err := r.db.QueryRow(ctx, queryInsertMeeting, m.Title, m.Date).
 		Scan(&m.ID, &m.CreatedAt)
 	if err != nil {
 		log.Error(ctx, "repo: failed to insert meeting", zap.Error(err))
-		return nil, err
-	}
-
-	for i := range m.AgendaItems {
-		if err := tx.QueryRow(ctx, queryInsertAgendaItem, m.ID, i, m.AgendaItems[i].Text, m.AgendaItems[i].Speaker.ID).
-			Scan(&m.AgendaItems[i].ID); err != nil {
-			log.Error(ctx, "repo: failed to insert agenda item", zap.Error(err))
-			return nil, err
-		}
-	}
-
-	for i, p := range m.Participants {
-		if _, err := tx.Exec(ctx, queryInsertMeetingParticipant, m.ID, p.ID, i); err != nil {
-			log.Error(ctx, "repo: failed to insert meeting participant", zap.Error(err))
-			return nil, err
-		}
-	}
-
-	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 

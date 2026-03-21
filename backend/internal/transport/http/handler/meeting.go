@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	domMeeting "meetings-editor/internal/domain/meeting"
-	"meetings-editor/internal/domain/participant"
+	"meetings-editor/internal/domain/person"
 	svcMeeting "meetings-editor/internal/service/meeting"
 	"meetings-editor/internal/transport/http/model"
 	"meetings-editor/pkg/errs"
@@ -70,33 +70,18 @@ func (h *MeetingHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Title == "" || req.Date.IsZero() || req.ChairpersonID == 0 ||
-		len(req.AgendaItems) == 0 || len(req.ParticipantIDs) == 0 {
-		respondError(w, http.StatusBadRequest, "missing required fields", nil)
+	if req.Title == "" || req.Date.IsZero() {
+		respondError(w, http.StatusBadRequest, "title and date are required", nil)
 		return
 	}
 
 	svcReq := &svcMeeting.CreateRequest{
-		Title:          req.Title,
-		Date:           req.Date,
-		ChairpersonID:  req.ChairpersonID,
-		ParticipantIDs: req.ParticipantIDs,
-	}
-	for _, item := range req.AgendaItems {
-		svcReq.AgendaItems = append(svcReq.AgendaItems, svcMeeting.AgendaItemRequest{
-			Text:      item.Text,
-			SpeakerID: item.SpeakerID,
-		})
+		Title: req.Title,
+		Date:  req.Date,
 	}
 
 	m, err := h.svc.Create(r.Context(), svcReq)
 	if err != nil {
-		var invalidIDs *svcMeeting.ErrInvalidIDs
-		if errors.As(err, &invalidIDs) {
-			respondError(w, http.StatusUnprocessableEntity, "one or more participants not found",
-				map[string]any{"invalid_participant_ids": invalidIDs.IDs})
-			return
-		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
@@ -125,7 +110,7 @@ func (h *MeetingHandler) GetByID(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
-// PUT /meetings/{id}
+// PATCH /meetings/{id}
 func (h *MeetingHandler) Update(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -138,24 +123,18 @@ func (h *MeetingHandler) Update(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
 	}
-	if req.Title == "" || req.Date.IsZero() || req.ChairpersonID == 0 {
-		respondError(w, http.StatusBadRequest, "title, date and chairperson_id are required", nil)
+	if req.Title == "" || req.Date.IsZero() {
+		respondError(w, http.StatusBadRequest, "title and date are required", nil)
 		return
 	}
 
 	m, err := h.svc.Update(r.Context(), id, &svcMeeting.UpdateRequest{
-		Title:         req.Title,
-		Date:          req.Date,
-		ChairpersonID: req.ChairpersonID,
+		Title: req.Title,
+		Date:  req.Date,
 	})
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting not found", nil)
-			return
-		}
-		var e *svcMeeting.ErrChairpersonNotInMeeting
-		if errors.As(err, &e) {
-			respondError(w, http.StatusUnprocessableEntity, e.Error(), nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
@@ -183,21 +162,52 @@ func (h *MeetingHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// POST /meetings/{id}/participants
-func (h *MeetingHandler) AddParticipant(w http.ResponseWriter, r *http.Request) {
+// PUT /meetings/{id}/chairperson
+func (h *MeetingHandler) SetChairperson(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
 		return
 	}
 
-	var req model.AddMeetingParticipantRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ParticipantID == 0 {
-		respondError(w, http.StatusBadRequest, "participant_id is required", nil)
+	var req model.SetChairpersonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PersonID == 0 {
+		respondError(w, http.StatusBadRequest, "person_id is required", nil)
 		return
 	}
 
-	m, err := h.svc.AddParticipant(r.Context(), id, req.ParticipantID)
+	m, err := h.svc.SetChairperson(r.Context(), id, req.PersonID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
+			return
+		}
+		var e *svcMeeting.ErrChairpersonNotInMeeting
+		if errors.As(err, &e) {
+			respondError(w, http.StatusUnprocessableEntity, e.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// POST /meetings/{id}/people
+func (h *MeetingHandler) AddPerson(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	var req model.AddMeetingPersonRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PersonID == 0 {
+		respondError(w, http.StatusBadRequest, "person_id is required", nil)
+		return
+	}
+
+	m, err := h.svc.AddPerson(r.Context(), id, req.PersonID)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting not found", nil)
@@ -205,10 +215,10 @@ func (h *MeetingHandler) AddParticipant(w http.ResponseWriter, r *http.Request) 
 		}
 		var e1 *svcMeeting.ErrInvalidIDs
 		if errors.As(err, &e1) {
-			respondError(w, http.StatusUnprocessableEntity, "participant not found", nil)
+			respondError(w, http.StatusUnprocessableEntity, "person not found", nil)
 			return
 		}
-		var e2 *svcMeeting.ErrParticipantAlreadyInMeeting
+		var e2 *svcMeeting.ErrPersonAlreadyInMeeting
 		if errors.As(err, &e2) {
 			respondError(w, http.StatusConflict, e2.Error(), nil)
 			return
@@ -219,8 +229,8 @@ func (h *MeetingHandler) AddParticipant(w http.ResponseWriter, r *http.Request) 
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
-// DELETE /meetings/{id}/participants/{pid}
-func (h *MeetingHandler) RemoveParticipant(w http.ResponseWriter, r *http.Request) {
+// DELETE /meetings/{id}/people/{pid}
+func (h *MeetingHandler) RemovePerson(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	pidStr := r.PathValue("pid")
 	pid, err := strconv.Atoi(pidStr)
@@ -229,10 +239,10 @@ func (h *MeetingHandler) RemoveParticipant(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	m, err := h.svc.RemoveParticipant(r.Context(), id, pid)
+	m, err := h.svc.RemovePerson(r.Context(), id, pid)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
-			respondError(w, http.StatusNotFound, "meeting or participant not found", nil)
+			respondError(w, http.StatusNotFound, "meeting or person not found", nil)
 			return
 		}
 		var e1 *svcMeeting.ErrChairpersonRemoval
@@ -251,7 +261,7 @@ func (h *MeetingHandler) RemoveParticipant(w http.ResponseWriter, r *http.Reques
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
-// POST /meetings/{id}/agenda
+// POST /meetings/{id}/agenda-items
 func (h *MeetingHandler) AddAgendaItem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -286,7 +296,7 @@ func (h *MeetingHandler) AddAgendaItem(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusCreated, toMeetingResponse(m))
 }
 
-// PUT /meetings/{id}/agenda/{item_id}
+// PUT /meetings/{id}/agenda-items/{item_id}
 func (h *MeetingHandler) UpdateAgendaItem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	itemIDStr := r.PathValue("item_id")
@@ -323,7 +333,7 @@ func (h *MeetingHandler) UpdateAgendaItem(w http.ResponseWriter, r *http.Request
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
-// DELETE /meetings/{id}/agenda/{item_id}
+// DELETE /meetings/{id}/agenda-items/{item_id}
 func (h *MeetingHandler) DeleteAgendaItem(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	itemIDStr := r.PathValue("item_id")
@@ -345,31 +355,31 @@ func (h *MeetingHandler) DeleteAgendaItem(w http.ResponseWriter, r *http.Request
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
-// PUT /meetings/{id}/participants/order
-func (h *MeetingHandler) ReorderParticipants(w http.ResponseWriter, r *http.Request) {
+// PUT /meetings/{id}/people/order
+func (h *MeetingHandler) ReorderPeople(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
 		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
 		return
 	}
 
-	var req model.ReorderParticipantsRequest
+	var req model.ReorderPeopleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
 	}
-	if len(req.ParticipantIDs) == 0 {
-		respondError(w, http.StatusBadRequest, "participant_ids must not be empty", nil)
+	if len(req.PersonIDs) == 0 {
+		respondError(w, http.StatusBadRequest, "person_ids must not be empty", nil)
 		return
 	}
 
-	err := h.svc.ReorderParticipants(r.Context(), id, req.ParticipantIDs)
+	err := h.svc.ReorderPeople(r.Context(), id, req.PersonIDs)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting not found", nil)
 			return
 		}
-		var mismatch *svcMeeting.ErrParticipantSetMismatch
+		var mismatch *svcMeeting.ErrPersonSetMismatch
 		if errors.As(err, &mismatch) {
 			respondError(w, http.StatusUnprocessableEntity, mismatch.Error(), nil)
 			return
@@ -381,7 +391,7 @@ func (h *MeetingHandler) ReorderParticipants(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// PUT /meetings/{id}/agenda/order
+// PUT /meetings/{id}/agenda-items/order
 func (h *MeetingHandler) ReorderAgendaItems(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == "" {
@@ -424,6 +434,11 @@ func (h *MeetingHandler) ExportAgenda(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if m.Status() == "incomplete" {
+		respondError(w, http.StatusConflict, (&svcMeeting.ErrMeetingIncomplete{}).Error(), nil)
+		return
+	}
+
 	data, err := h.export.Agenda(m)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "failed to generate document", nil)
@@ -437,6 +452,11 @@ func (h *MeetingHandler) ExportAgenda(w http.ResponseWriter, r *http.Request) {
 func (h *MeetingHandler) ExportParticipants(w http.ResponseWriter, r *http.Request) {
 	m, ok := h.fetchMeeting(w, r)
 	if !ok {
+		return
+	}
+
+	if m.Status() == "incomplete" {
+		respondError(w, http.StatusConflict, (&svcMeeting.ErrMeetingIncomplete{}).Error(), nil)
 		return
 	}
 
@@ -489,8 +509,8 @@ func queryInt(r *http.Request, key string, def int) int {
 	return v
 }
 
-func toParticipantResp(p participant.Participant) model.ParticipantResponse {
-	return model.ParticipantResponse{
+func toPersonResp(p person.Person) model.PersonResponse {
+	return model.PersonResponse{
 		ID:         p.ID,
 		LastName:   p.LastName,
 		FirstName:  p.FirstName,
@@ -500,37 +520,50 @@ func toParticipantResp(p participant.Participant) model.ParticipantResponse {
 }
 
 func toMeetingSummaryResponse(m *domMeeting.Meeting) model.MeetingSummaryResponse {
+	var chairperson *model.PersonResponse
+	if m.Chairperson != nil {
+		r := toPersonResp(*m.Chairperson)
+		chairperson = &r
+	}
 	return model.MeetingSummaryResponse{
 		ID:          m.ID,
 		Title:       m.Title,
 		Date:        m.Date,
-		Chairperson: toParticipantResp(m.Chairperson),
+		Chairperson: chairperson,
+		Status:      m.Status(),
 		CreatedAt:   m.CreatedAt,
 	}
 }
 
 func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
+	var chairperson *model.PersonResponse
+	if m.Chairperson != nil {
+		r := toPersonResp(*m.Chairperson)
+		chairperson = &r
+	}
+
 	items := make([]model.AgendaItemResponse, 0, len(m.AgendaItems))
 	for _, item := range m.AgendaItems {
 		items = append(items, model.AgendaItemResponse{
 			ID:      item.ID,
 			Text:    item.Text,
-			Speaker: toParticipantResp(item.Speaker),
+			Speaker: toPersonResp(item.Speaker),
 		})
 	}
 
-	participants := make([]model.ParticipantResponse, 0, len(m.Participants))
-	for _, p := range m.Participants {
-		participants = append(participants, toParticipantResp(p))
+	people := make([]model.PersonResponse, 0, len(m.People))
+	for _, p := range m.People {
+		people = append(people, toPersonResp(p))
 	}
 
 	return model.MeetingResponse{
-		ID:           m.ID,
-		Title:        m.Title,
-		Date:         m.Date,
-		Chairperson:  toParticipantResp(m.Chairperson),
-		AgendaItems:  items,
-		Participants: participants,
-		CreatedAt:    m.CreatedAt,
+		ID:          m.ID,
+		Title:       m.Title,
+		Date:        m.Date,
+		Chairperson: chairperson,
+		AgendaItems: items,
+		People:      people,
+		Status:      m.Status(),
+		CreatedAt:   m.CreatedAt,
 	}
 }
