@@ -137,10 +137,10 @@ paths:
     patch:
       tags:
         - people
-      summary: Update a person (partial)
+      summary: Update a person
       description: >
-        Partially updates an existing person's fields. Only the fields present
-        in the request body are updated; omitted fields remain unchanged.
+        Updates an existing person's fields. last_name and first_name are required;
+        middle_name and info are optional (omit or send empty string to clear).
         Returns 409 if the new name combination already belongs to a different person.
       parameters:
         - name: id
@@ -368,10 +368,9 @@ paths:
     patch:
       tags:
         - meetings
-      summary: Update meeting title and/or date (partial)
+      summary: Update meeting title and date
       description: >
-        Partially updates the title and/or date of an existing meeting.
-        Only fields present in the request body are updated.
+        Updates the title and date of an existing meeting. Both fields are required.
         To set or change the chairperson use PUT /meetings/{id}/chairperson.
         Returns the full updated Meeting object.
       parameters:
@@ -1050,7 +1049,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error422'
               example:
-                message: agenda item IDs must exactly match the meeting's current agenda items
+                message: speaker IDs must exactly match the agenda item's current speakers
 
   /meetings/{id}/agenda-items/order:
     put:
@@ -1519,9 +1518,10 @@ components:
 
     MeetingUpdate:
       type: object
-      description: >
-        Payload for partially updating an existing meeting's title and/or date.
-        Only fields present in the body are updated.
+      description: Payload for updating an existing meeting's title and date. Both fields are required.
+      required:
+        - title
+        - date
       properties:
         title:
           type: string

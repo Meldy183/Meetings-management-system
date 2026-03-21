@@ -154,13 +154,13 @@ The entire meeting is assembled in a 5-step wizard and submitted in a single POS
 The meeting detail page supports full editing via the API:
 - **Edit meeting** — inline form for title, date, chairperson (dropdown from current participants)
 - **Delete meeting** — with confirmation, navigates back to list
-- **Add participant** — debounced search box, click to add via `POST /meetings/{id}/participants`
-- **Remove participant** — × button per row (blocked if chairperson or speaker, with error message)
-- **Reorder participants** — drag-and-drop (`PUT /meetings/{id}/participants/order`)
+- **Add person** — debounced search box, click to add via `POST /meetings/{id}/people`
+- **Remove person** — × button per row (blocked if chairperson or speaker, with error message)
+- **Reorder people** — drag-and-drop (`PUT /meetings/{id}/people/order`)
 - **Add agenda item** — inline form with text + speaker dropdown
 - **Edit agenda item** — inline form per item
 - **Delete agenda item** — × button per item
-- **Reorder agenda items** — drag-and-drop (`PUT /meetings/{id}/agenda/order`)
+- **Reorder agenda items** — drag-and-drop (`PUT /meetings/{id}/agenda-items/order`)
 - **Export** — download Повестка or Список участников as `.docx`
 
 ---
