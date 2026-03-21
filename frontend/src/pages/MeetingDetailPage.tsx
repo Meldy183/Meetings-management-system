@@ -3,14 +3,14 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getMeeting, downloadAgenda, downloadParticipants,
-  reorderParticipants, reorderAgendaItems,
-  updateMeeting, deleteMeeting,
-  addMeetingParticipant, removeMeetingParticipant,
+  reorderPeople, reorderAgendaItems,
+  updateMeeting, setChairperson, deleteMeeting,
+  addMeetingPerson, removeMeetingPerson,
   addAgendaItem, updateAgendaItem, deleteAgendaItem,
 } from '../api/meetings'
-import { getParticipants } from '../api/participants'
+import { getPeople } from '../api/people'
 import { ApiError } from '../api/client'
-import type { Participant, AgendaItem, Meeting } from '../api/types'
+import type { Person, AgendaItem, Meeting } from '../api/types'
 
 function useDragReorder<T>(
   items: T[],
@@ -36,7 +36,7 @@ function useDragReorder<T>(
   return { dragIndex, dragOverIndex, handleDragStart, handleDragOver, handleDrop, handleDragEnd }
 }
 
-function fullName(p: Participant) {
+function fullName(p: Person) {
   return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
 }
 
@@ -48,24 +48,28 @@ export function MeetingDetailPage() {
 
   // DnD local state
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
-  const [participants, setParticipants] = useState<Participant[]>([])
+  const [people, setPeople] = useState<Person[]>([])
 
-  // Edit meeting state
+  // Edit meeting metadata state
   const [editingMeeting, setEditingMeeting] = useState(false)
-  const [meetingForm, setMeetingForm] = useState({ title: '', date: '', chairperson_id: 0 })
+  const [meetingForm, setMeetingForm] = useState({ title: '', date: '' })
+
+  // Chairperson state
+  const [editingChairperson, setEditingChairperson] = useState(false)
+  const [chairpersonId, setChairpersonId] = useState(0)
 
   // Edit agenda item state
   const [editingItemId, setEditingItemId] = useState<number | null>(null)
-  const [itemForm, setItemForm] = useState({ text: '', speaker_id: 0 })
+  const [itemForm, setItemForm] = useState({ text: '', speaker_ids: [] as number[] })
 
   // Add agenda item state
   const [showAddItem, setShowAddItem] = useState(false)
-  const [newItem, setNewItem] = useState({ text: '', speaker_id: 0 })
+  const [newItem, setNewItem] = useState({ text: '', speaker_ids: [] as number[] })
 
-  // Add participant search state
-  const [participantQuery, setParticipantQuery] = useState('')
-  const [debouncedParticipantQuery, setDebouncedParticipantQuery] = useState('')
-  const [participantError, setParticipantError] = useState<string | null>(null)
+  // Add person search state
+  const [personQuery, setPersonQuery] = useState('')
+  const [debouncedPersonQuery, setDebouncedPersonQuery] = useState('')
+  const [personError, setPersonError] = useState<string | null>(null)
 
   const { data: meeting, isLoading, isError } = useQuery({
     queryKey: ['meeting', id],
@@ -76,43 +80,49 @@ export function MeetingDetailPage() {
   useEffect(() => {
     if (meeting) {
       setAgendaItems(meeting.agenda_items)
-      setParticipants(meeting.participants)
+      setPeople(meeting.people)
     }
   }, [meeting])
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedParticipantQuery(participantQuery), 300)
+    const t = setTimeout(() => setDebouncedPersonQuery(personQuery), 300)
     return () => clearTimeout(t)
-  }, [participantQuery])
+  }, [personQuery])
 
   const { data: searchResults = [], isFetching: isSearching } = useQuery({
-    queryKey: ['participants', 'search', debouncedParticipantQuery],
-    queryFn: () => getParticipants(debouncedParticipantQuery),
-    enabled: debouncedParticipantQuery.trim().length > 0,
+    queryKey: ['people', 'search', debouncedPersonQuery],
+    queryFn: () => getPeople(debouncedPersonQuery),
+    enabled: debouncedPersonQuery.trim().length > 0,
   })
 
   function setMeetingData(updated: Meeting) {
     queryClient.setQueryData(['meeting', id], updated)
   }
 
-  // DnD mutations (existing)
+  // DnD mutations
   const agendaMutation = useMutation({
     mutationFn: (ids: number[]) => reorderAgendaItems(id!, ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
     onError: () => { if (meeting) setAgendaItems(meeting.agenda_items) },
   })
 
-  const participantsMutation = useMutation({
-    mutationFn: (ids: number[]) => reorderParticipants(id!, ids),
+  const peopleMutation = useMutation({
+    mutationFn: (ids: number[]) => reorderPeople(id!, ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
-    onError: () => { if (meeting) setParticipants(meeting.participants) },
+    onError: () => { if (meeting) setPeople(meeting.people) },
   })
 
-  // New mutations
   const updateMeetingMutation = useMutation({
-    mutationFn: (data: { title: string; date: string; chairperson_id: number }) =>
-      updateMeeting(id!, data),
+    mutationFn: (data: { title: string; date: string }) => updateMeeting(id!, data),
     onSuccess: (updated) => { setMeetingData(updated); setEditingMeeting(false) },
+  })
+
+  const setChairpersonMutation = useMutation({
+    mutationFn: (personId: number) => setChairperson(id!, personId),
+    onSuccess: (updated) => { setMeetingData(updated); setEditingChairperson(false) },
+    onError: (e) => {
+      if (e instanceof ApiError) alert(e.message)
+    },
   })
 
   const deleteMeetingMutation = useMutation({
@@ -120,20 +130,20 @@ export function MeetingDetailPage() {
     onSuccess: () => navigate('/'),
   })
 
-  const addParticipantMutation = useMutation({
-    mutationFn: (participantId: number) => addMeetingParticipant(id!, participantId),
+  const addPersonMutation = useMutation({
+    mutationFn: (personId: number) => addMeetingPerson(id!, personId),
     onSuccess: (updated) => {
       setMeetingData(updated)
-      setParticipantQuery('')
-      setParticipantError(null)
+      setPersonQuery('')
+      setPersonError(null)
     },
     onError: (e) => {
-      if (e instanceof ApiError) setParticipantError(e.message)
+      if (e instanceof ApiError) setPersonError(e.message)
     },
   })
 
-  const removeParticipantMutation = useMutation({
-    mutationFn: (participantId: number) => removeMeetingParticipant(id!, participantId),
+  const removePersonMutation = useMutation({
+    mutationFn: (personId: number) => removeMeetingPerson(id!, personId),
     onSuccess: (updated) => setMeetingData(updated),
     onError: (e) => {
       if (e instanceof ApiError) alert(e.message)
@@ -141,12 +151,12 @@ export function MeetingDetailPage() {
   })
 
   const addAgendaItemMutation = useMutation({
-    mutationFn: (data: { text: string; speaker_id: number }) => addAgendaItem(id!, data),
-    onSuccess: (updated) => { setMeetingData(updated); setShowAddItem(false); setNewItem({ text: '', speaker_id: 0 }) },
+    mutationFn: (data: { text: string; speaker_ids: number[] }) => addAgendaItem(id!, data),
+    onSuccess: (updated) => { setMeetingData(updated); setShowAddItem(false); setNewItem({ text: '', speaker_ids: [] }) },
   })
 
   const updateAgendaItemMutation = useMutation({
-    mutationFn: ({ itemId, data }: { itemId: number; data: { text: string; speaker_id: number } }) =>
+    mutationFn: ({ itemId, data }: { itemId: number; data: { text: string; speaker_ids: number[] } }) =>
       updateAgendaItem(id!, itemId, data),
     onSuccess: (updated) => { setMeetingData(updated); setEditingItemId(null) },
   })
@@ -162,9 +172,9 @@ export function MeetingDetailPage() {
     agendaMutation.mutate(reordered.map(i => i.id))
   })
 
-  const participantsDnd = useDragReorder(participants, (reordered) => {
-    setParticipants(reordered)
-    participantsMutation.mutate(reordered.map(p => p.id))
+  const peopleDnd = useDragReorder(people, (reordered) => {
+    setPeople(reordered)
+    peopleMutation.mutate(reordered.map(p => p.id))
   })
 
   function formatDate(iso: string) {
@@ -178,12 +188,22 @@ export function MeetingDetailPage() {
     return new Date(iso).toISOString().slice(0, 16)
   }
 
+  function toggleSpeaker(speakerIds: number[], pid: number): number[] {
+    return speakerIds.includes(pid)
+      ? speakerIds.filter(id => id !== pid)
+      : [...speakerIds, pid]
+  }
+
   async function handleDownload(type: 'agenda' | 'participants') {
     if (!id) return
     setDownloading(type)
     try {
       if (type === 'agenda') await downloadAgenda(id)
       else await downloadParticipants(id)
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        alert('Совещание не готово к экспорту: назначьте председателя, добавьте участников и повестку')
+      }
     } finally {
       setDownloading(null)
     }
@@ -198,11 +218,20 @@ export function MeetingDetailPage() {
       {/* Header */}
       <div className="flex items-start gap-3">
         <Link to="/" className="text-gray-400 hover:text-gray-600 mt-1">←</Link>
-        <h1 className="text-lg font-semibold text-gray-900 leading-snug flex-1">{meeting.title}</h1>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold text-gray-900 leading-snug">{meeting.title}</h1>
+            {meeting.status === 'incomplete' && (
+              <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                Не готово
+              </span>
+            )}
+          </div>
+        </div>
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => {
-              setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date), chairperson_id: meeting.chairperson.id })
+              setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date) })
               setEditingMeeting(true)
             }}
             className="text-xs text-gray-500 hover:text-blue-600 border rounded px-2 py-1"
@@ -221,7 +250,7 @@ export function MeetingDetailPage() {
       {/* Meeting info / edit form */}
       {editingMeeting ? (
         <div className="bg-white border rounded-lg p-4 space-y-3">
-          <p className="text-sm font-medium text-gray-700">Редактирование совещания</p>
+          <p className="text-sm font-medium text-gray-700">Редактирование темы и даты</p>
           <div>
             <label className="block text-xs text-gray-500 mb-1">Тема</label>
             <textarea
@@ -240,19 +269,6 @@ export function MeetingDetailPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label className="block text-xs text-gray-500 mb-1">Председательствующий</label>
-            <select
-              value={meetingForm.chairperson_id}
-              onChange={e => setMeetingForm(f => ({ ...f, chairperson_id: Number(e.target.value) }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value={0}>Выберите председателя</option>
-              {participants.map(p => (
-                <option key={p.id} value={p.id}>{fullName(p)}</option>
-              ))}
-            </select>
-          </div>
           {updateMeetingMutation.isError && (
             <p className="text-xs text-red-500">
               {updateMeetingMutation.error instanceof ApiError
@@ -268,11 +284,10 @@ export function MeetingDetailPage() {
               Отмена
             </button>
             <button
-              disabled={!meetingForm.title || !meetingForm.date || !meetingForm.chairperson_id || updateMeetingMutation.isPending}
+              disabled={!meetingForm.title || !meetingForm.date || updateMeetingMutation.isPending}
               onClick={() => updateMeetingMutation.mutate({
                 title: meetingForm.title,
                 date: new Date(meetingForm.date).toISOString(),
-                chairperson_id: meetingForm.chairperson_id,
               })}
               className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
@@ -286,32 +301,86 @@ export function MeetingDetailPage() {
             <span className="text-gray-500">Дата</span>
             <span className="font-medium">{formatDate(meeting.date)}</span>
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Председательствующий</span>
-            <span className="font-medium text-right">{fullName(meeting.chairperson)}</span>
-          </div>
         </div>
       )}
 
-      {/* Participants */}
+      {/* Chairperson */}
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700">Участники ({participants.length})</h2>
-          {participantsMutation.isPending && <span className="text-xs text-gray-400">Сохранение...</span>}
+          <h2 className="text-sm font-semibold text-gray-700">Председательствующий</h2>
+          {!editingChairperson && (
+            <button
+              onClick={() => {
+                setChairpersonId(meeting.chairperson?.id ?? 0)
+                setEditingChairperson(true)
+              }}
+              className="text-xs text-gray-500 hover:text-blue-600 border rounded px-2 py-1"
+            >
+              {meeting.chairperson ? 'Изменить' : 'Назначить'}
+            </button>
+          )}
+        </div>
+        {editingChairperson ? (
+          <div className="bg-white border rounded-lg p-3 space-y-2">
+            <select
+              value={chairpersonId}
+              onChange={e => setChairpersonId(Number(e.target.value))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              <option value={0}>Выберите председателя</option>
+              {people.map(p => (
+                <option key={p.id} value={p.id}>{fullName(p)}</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setEditingChairperson(false)}
+                className="flex-1 border text-gray-700 py-1.5 rounded-lg text-xs hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                disabled={!chairpersonId || setChairpersonMutation.isPending}
+                onClick={() => setChairpersonMutation.mutate(chairpersonId)}
+                className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+              >
+                {setChairpersonMutation.isPending ? 'Сохранение...' : 'Сохранить'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white border rounded-lg p-3 text-sm">
+            {meeting.chairperson ? (
+              <div>
+                <p className="font-medium">{fullName(meeting.chairperson)}</p>
+                {meeting.chairperson.info && <p className="text-xs text-gray-500 mt-0.5">{meeting.chairperson.info}</p>}
+              </div>
+            ) : (
+              <p className="text-gray-400 italic">Не назначен</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* People */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-gray-700">Участники ({people.length})</h2>
+          {peopleMutation.isPending && <span className="text-xs text-gray-400">Сохранение...</span>}
         </div>
         <div className="space-y-1">
-          {participants.map((p, i) => (
+          {people.map((p, i) => (
             <div
               key={p.id}
               draggable
-              onDragStart={() => participantsDnd.handleDragStart(i)}
-              onDragOver={(e) => participantsDnd.handleDragOver(e, i)}
-              onDrop={() => participantsDnd.handleDrop(i)}
-              onDragEnd={participantsDnd.handleDragEnd}
+              onDragStart={() => peopleDnd.handleDragStart(i)}
+              onDragOver={(e) => peopleDnd.handleDragOver(e, i)}
+              onDrop={() => peopleDnd.handleDrop(i)}
+              onDragEnd={peopleDnd.handleDragEnd}
               className={[
                 'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity',
-                participantsDnd.dragOverIndex === i && participantsDnd.dragIndex.current !== i ? 'border-blue-400 bg-blue-50' : '',
-                participantsDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
+                peopleDnd.dragOverIndex === i && peopleDnd.dragIndex.current !== i ? 'border-blue-400 bg-blue-50' : '',
+                peopleDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
               ].join(' ')}
             >
               <span className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing select-none text-lg leading-none">⠿</span>
@@ -320,8 +389,11 @@ export function MeetingDetailPage() {
                 <p className="text-sm font-medium truncate">{fullName(p)}</p>
                 {p.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{p.info}</p>}
               </div>
+              {meeting.chairperson?.id === p.id && (
+                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0">Пред.</span>
+              )}
               <button
-                onClick={() => { if (confirm(`Удалить ${p.last_name} из совещания?`)) removeParticipantMutation.mutate(p.id) }}
+                onClick={() => { if (confirm(`Удалить ${p.last_name} из совещания?`)) removePersonMutation.mutate(p.id) }}
                 className="shrink-0 text-gray-300 hover:text-red-500 text-lg leading-none"
                 title="Удалить из совещания"
               >
@@ -331,18 +403,18 @@ export function MeetingDetailPage() {
           ))}
         </div>
 
-        {/* Add participant search */}
+        {/* Add person search */}
         <div className="mt-3 space-y-2">
           <input
-            value={participantQuery}
-            onChange={e => { setParticipantQuery(e.target.value); setParticipantError(null) }}
+            value={personQuery}
+            onChange={e => { setPersonQuery(e.target.value); setPersonError(null) }}
             placeholder="Добавить участника..."
             className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {debouncedParticipantQuery && !isSearching && searchResults.length > 0 && (
+          {debouncedPersonQuery && !isSearching && searchResults.length > 0 && (
             <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
               {searchResults.map(p => {
-                const alreadyIn = participants.some(mp => mp.id === p.id)
+                const alreadyIn = people.some(mp => mp.id === p.id)
                 return (
                   <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50">
                     <div className="min-w-0">
@@ -353,8 +425,8 @@ export function MeetingDetailPage() {
                       <span className="text-xs text-gray-400 shrink-0 ml-3">В списке</span>
                     ) : (
                       <button
-                        onClick={() => addParticipantMutation.mutate(p.id)}
-                        disabled={addParticipantMutation.isPending}
+                        onClick={() => addPersonMutation.mutate(p.id)}
+                        disabled={addPersonMutation.isPending}
                         className="shrink-0 ml-3 bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
                       >
                         Добавить
@@ -365,10 +437,10 @@ export function MeetingDetailPage() {
               })}
             </div>
           )}
-          {debouncedParticipantQuery && !isSearching && searchResults.length === 0 && (
+          {debouncedPersonQuery && !isSearching && searchResults.length === 0 && (
             <p className="text-xs text-gray-500 px-1">Никого не найдено</p>
           )}
-          {participantError && <p className="text-xs text-red-500 px-1">{participantError}</p>}
+          {personError && <p className="text-xs text-red-500 px-1">{personError}</p>}
         </div>
       </div>
 
@@ -389,14 +461,20 @@ export function MeetingDetailPage() {
                     placeholder="Тема пункта повестки"
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <select
-                    value={itemForm.speaker_id}
-                    onChange={e => setItemForm(f => ({ ...f, speaker_id: Number(e.target.value) }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value={0}>Выберите докладчика</option>
-                    {participants.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-                  </select>
+                  <p className="text-xs text-gray-500 font-medium">Докладчики (выберите одного или нескольких):</p>
+                  <div className="space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
+                    {people.map(p => (
+                      <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                        <input
+                          type="checkbox"
+                          checked={itemForm.speaker_ids.includes(p.id)}
+                          onChange={() => setItemForm(f => ({ ...f, speaker_ids: toggleSpeaker(f.speaker_ids, p.id) }))}
+                          className="rounded"
+                        />
+                        <span className="text-sm">{fullName(p)}</span>
+                      </label>
+                    ))}
+                  </div>
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingItemId(null)}
@@ -405,8 +483,8 @@ export function MeetingDetailPage() {
                       Отмена
                     </button>
                     <button
-                      disabled={!itemForm.text || !itemForm.speaker_id || updateAgendaItemMutation.isPending}
-                      onClick={() => updateAgendaItemMutation.mutate({ itemId: item.id, data: { text: itemForm.text, speaker_id: itemForm.speaker_id } })}
+                      disabled={!itemForm.text || itemForm.speaker_ids.length === 0 || updateAgendaItemMutation.isPending}
+                      onClick={() => updateAgendaItemMutation.mutate({ itemId: item.id, data: { text: itemForm.text, speaker_ids: itemForm.speaker_ids } })}
                       className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
                     >
                       Сохранить
@@ -431,12 +509,16 @@ export function MeetingDetailPage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{item.text}</p>
                     <p className="text-xs text-gray-500 mt-1">
-                      Докладчик: {fullName(item.speaker)}
+                      {item.speakers.length === 1 ? 'Докладчик' : 'Докладчики'}:{' '}
+                      {item.speakers.map(s => fullName(s)).join(', ')}
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">
                     <button
-                      onClick={() => { setEditingItemId(item.id); setItemForm({ text: item.text, speaker_id: item.speaker.id }) }}
+                      onClick={() => {
+                        setEditingItemId(item.id)
+                        setItemForm({ text: item.text, speaker_ids: item.speakers.map(s => s.id) })
+                      }}
                       className="text-xs text-gray-400 hover:text-blue-600 px-1.5 py-1 rounded"
                     >
                       ✎
@@ -463,24 +545,30 @@ export function MeetingDetailPage() {
               placeholder="Тема пункта повестки"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <select
-              value={newItem.speaker_id}
-              onChange={e => setNewItem(f => ({ ...f, speaker_id: Number(e.target.value) }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-            >
-              <option value={0}>Выберите докладчика</option>
-              {participants.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}
-            </select>
+            <p className="text-xs text-gray-500 font-medium">Докладчики (выберите одного или нескольких):</p>
+            <div className="space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
+              {people.map(p => (
+                <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
+                  <input
+                    type="checkbox"
+                    checked={newItem.speaker_ids.includes(p.id)}
+                    onChange={() => setNewItem(f => ({ ...f, speaker_ids: toggleSpeaker(f.speaker_ids, p.id) }))}
+                    className="rounded"
+                  />
+                  <span className="text-sm">{fullName(p)}</span>
+                </label>
+              ))}
+            </div>
             <div className="flex gap-2">
               <button
-                onClick={() => { setShowAddItem(false); setNewItem({ text: '', speaker_id: 0 }) }}
+                onClick={() => { setShowAddItem(false); setNewItem({ text: '', speaker_ids: [] }) }}
                 className="flex-1 border text-gray-700 py-1.5 rounded-lg text-xs hover:bg-gray-50"
               >
                 Отмена
               </button>
               <button
-                disabled={!newItem.text || !newItem.speaker_id || addAgendaItemMutation.isPending}
-                onClick={() => addAgendaItemMutation.mutate({ text: newItem.text, speaker_id: newItem.speaker_id })}
+                disabled={!newItem.text || newItem.speaker_ids.length === 0 || addAgendaItemMutation.isPending}
+                onClick={() => addAgendaItemMutation.mutate({ text: newItem.text, speaker_ids: newItem.speaker_ids })}
                 className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
               >
                 Добавить

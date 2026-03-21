@@ -46,4 +46,5 @@ type Repository interface {
 	DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) error
 	AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error
 	RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error
+	ReorderAgendaItemSpeakers(ctx context.Context, meetingID string, itemID int, speakerIDs []int) error
 }

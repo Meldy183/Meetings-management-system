@@ -1,7 +1,7 @@
-import type { Participant } from '../api/types'
+import type { Person } from '../api/types'
 
 interface Props {
-  participant: Participant
+  participant: Person
   onRemove?: () => void
   onEdit?: () => void
   badge?: string // e.g. "Председатель"

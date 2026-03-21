@@ -1,4 +1,4 @@
-export interface Participant {
+export interface Person {
   id: number
   last_name: string
   first_name: string
@@ -6,37 +6,30 @@ export interface Participant {
   info?: string
 }
 
-export interface ParticipantCreate {
+export interface PersonCreate {
   last_name: string
   first_name: string
   middle_name?: string
   info?: string
-}
-
-export interface AgendaItemCreate {
-  text: string
-  speaker_id: number
 }
 
 export interface AgendaItem {
   id: number
   text: string
-  speaker: Participant
+  speakers: Person[]
 }
 
 export interface MeetingCreate {
   title: string
   date: string // ISO 8601
-  chairperson_id: number
-  agenda_items: AgendaItemCreate[]
-  participant_ids: number[]
 }
 
 export interface MeetingSummary {
   id: string
   title: string
   date: string
-  chairperson: Participant
+  chairperson: Person | null
+  status: string
   created_at: string
 }
 
@@ -51,9 +44,10 @@ export interface Meeting {
   id: string
   title: string
   date: string
-  chairperson: Participant
+  chairperson: Person | null
   agenda_items: AgendaItem[]
-  participants: Participant[]
+  people: Person[]
+  status: string
   created_at: string
 }
 

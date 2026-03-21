@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getParticipants, createParticipant } from '../api/participants'
+import { getPeople, createPerson } from '../api/people'
 import { ApiError } from '../api/client'
 import { ParticipantForm } from './ParticipantForm'
-import type { Participant, ParticipantCreate } from '../api/types'
+import type { Person, PersonCreate } from '../api/types'
 
 interface Props {
-  onAdd: (participant: Participant) => void
+  onAdd: (person: Person) => void
   existingIds: number[]
 }
 
@@ -26,19 +26,19 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
   const hasQuery = query.trim().length > 0
 
   const { data: results = [], isFetching } = useQuery({
-    queryKey: ['participants', 'search', debouncedQuery],
-    queryFn: () => getParticipants(debouncedQuery),
+    queryKey: ['people', 'search', debouncedQuery],
+    queryFn: () => getPeople(debouncedQuery),
     enabled: debouncedQuery.trim().length > 0,
   })
 
   const noResults = debouncedQuery.trim().length > 0 && !isFetching && results.length === 0
 
-  async function onCreate(data: ParticipantCreate) {
+  async function onCreate(data: PersonCreate) {
     setCreating(true)
     setCreateError(null)
     try {
-      const p = await createParticipant(data)
-      queryClient.invalidateQueries({ queryKey: ['participants'] })
+      const p = await createPerson(data)
+      queryClient.invalidateQueries({ queryKey: ['people'] })
       onAdd(p)
       setShowCreateForm(false)
       setQuery('')

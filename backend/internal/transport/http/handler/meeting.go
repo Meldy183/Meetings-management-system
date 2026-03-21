@@ -422,6 +422,43 @@ func (h *MeetingHandler) RemoveAgendaItemSpeaker(w http.ResponseWriter, r *http.
 	respond(w, http.StatusOK, toMeetingResponse(m))
 }
 
+// PUT /meetings/{id}/agenda-items/{item_id}/speakers/order
+func (h *MeetingHandler) ReorderAgendaItemSpeakers(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	itemIDStr := r.PathValue("item_id")
+	itemID, err := strconv.Atoi(itemIDStr)
+	if id == "" || err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	var req model.ReorderAgendaItemSpeakersRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	if len(req.PersonIDs) == 0 {
+		respondError(w, http.StatusBadRequest, "person_ids must not be empty", nil)
+		return
+	}
+
+	err = h.svc.ReorderAgendaItemSpeakers(r.Context(), id, itemID, req.PersonIDs)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
+			return
+		}
+		var mismatch *svcMeeting.ErrAgendaItemSetMismatch
+		if errors.As(err, &mismatch) {
+			respondError(w, http.StatusUnprocessableEntity, mismatch.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // PUT /meetings/{id}/people/order
 func (h *MeetingHandler) ReorderPeople(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

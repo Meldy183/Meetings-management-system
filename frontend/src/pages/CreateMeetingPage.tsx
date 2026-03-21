@@ -1,33 +1,32 @@
 import { useReducer, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createMeeting } from '../api/meetings'
-import { updateParticipant } from '../api/participants'
+import { createMeeting, addMeetingPerson, setChairperson, addAgendaItem } from '../api/meetings'
+import { updatePerson } from '../api/people'
 import { ParticipantSearch } from '../components/ParticipantSearch'
 import { ParticipantCard } from '../components/ParticipantCard'
 import { ParticipantForm } from '../components/ParticipantForm'
 import { StepIndicator } from '../components/StepIndicator'
-import { ApiError } from '../api/client'
-import type { Participant, ParticipantCreate } from '../api/types'
+import type { Person, PersonCreate } from '../api/types'
 
 interface AgendaItem {
   text: string
-  speaker_id: number
+  speaker_ids: number[]
 }
 
 interface WizardState {
   title: string
   date: string
-  participants: Participant[]
+  people: Person[]
   chairperson_id: number | null
   agenda_items: AgendaItem[]
 }
 
 type WizardAction =
   | { type: 'SET_TITLE_DATE'; title: string; date: string }
-  | { type: 'ADD_PARTICIPANT'; participant: Participant }
-  | { type: 'REMOVE_PARTICIPANT'; id: number }
-  | { type: 'UPDATE_PARTICIPANT'; participant: Participant }
+  | { type: 'ADD_PERSON'; person: Person }
+  | { type: 'REMOVE_PERSON'; id: number }
+  | { type: 'UPDATE_PERSON'; person: Person }
   | { type: 'SET_CHAIRPERSON'; id: number }
   | { type: 'ADD_AGENDA_ITEM' }
   | { type: 'UPDATE_AGENDA_ITEM'; index: number; item: AgendaItem }
@@ -37,26 +36,27 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case 'SET_TITLE_DATE':
       return { ...state, title: action.title, date: action.date }
-    case 'ADD_PARTICIPANT':
-      if (state.participants.find(p => p.id === action.participant.id)) return state
-      return { ...state, participants: [...state.participants, action.participant] }
-    case 'REMOVE_PARTICIPANT': {
-      const newParticipants = state.participants.filter(p => p.id !== action.id)
+    case 'ADD_PERSON':
+      if (state.people.find(p => p.id === action.person.id)) return state
+      return { ...state, people: [...state.people, action.person] }
+    case 'REMOVE_PERSON': {
+      const newPeople = state.people.filter(p => p.id !== action.id)
       return {
         ...state,
-        participants: newParticipants,
+        people: newPeople,
         chairperson_id: state.chairperson_id === action.id ? null : state.chairperson_id,
-        agenda_items: state.agenda_items.map(item =>
-          item.speaker_id === action.id ? { ...item, speaker_id: 0 } : item
-        ),
+        agenda_items: state.agenda_items.map(item => ({
+          ...item,
+          speaker_ids: item.speaker_ids.filter(sid => sid !== action.id),
+        })),
       }
     }
-    case 'UPDATE_PARTICIPANT':
-      return { ...state, participants: state.participants.map(p => p.id === action.participant.id ? action.participant : p) }
+    case 'UPDATE_PERSON':
+      return { ...state, people: state.people.map(p => p.id === action.person.id ? action.person : p) }
     case 'SET_CHAIRPERSON':
       return { ...state, chairperson_id: action.id }
     case 'ADD_AGENDA_ITEM':
-      return { ...state, agenda_items: [...state.agenda_items, { text: '', speaker_id: 0 }] }
+      return { ...state, agenda_items: [...state.agenda_items, { text: '', speaker_ids: [] }] }
     case 'UPDATE_AGENDA_ITEM':
       return { ...state, agenda_items: state.agenda_items.map((item, i) => i === action.index ? action.item : item) }
     case 'REMOVE_AGENDA_ITEM':
@@ -71,7 +71,7 @@ const STEP_LABELS = ['Тема', 'Участники', 'Председатель
 const initialState: WizardState = {
   title: '',
   date: '',
-  participants: [],
+  people: [],
   chairperson_id: null,
   agenda_items: [],
 }
@@ -79,53 +79,60 @@ const initialState: WizardState = {
 export function CreateMeetingPage() {
   const [step, setStep] = useState(1)
   const [state, dispatch] = useReducer(reducer, initialState)
-  const [editingParticipantId, setEditingParticipantId] = useState<number | null>(null)
+  const [editingPersonId, setEditingPersonId] = useState<number | null>(null)
   const [titleInput, setTitleInput] = useState('')
   const [dateInput, setDateInput] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
 
-  const updateParticipantMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: ParticipantCreate }) => updateParticipant(id, data),
+  const updatePersonMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: PersonCreate }) => updatePerson(id, data),
     onSuccess: (updated) => {
-      dispatch({ type: 'UPDATE_PARTICIPANT', participant: updated })
-      setEditingParticipantId(null)
+      dispatch({ type: 'UPDATE_PERSON', person: updated })
+      setEditingPersonId(null)
     },
   })
 
-  const createMeetingMutation = useMutation({
-    mutationFn: () => createMeeting({
-      title: state.title,
-      date: new Date(state.date).toISOString(),
-      chairperson_id: state.chairperson_id!,
-      agenda_items: state.agenda_items,
-      participant_ids: state.participants.map(p => p.id),
-    }),
-    onSuccess: (meeting) => {
+  async function handleSubmit() {
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const meeting = await createMeeting({
+        title: state.title,
+        date: new Date(state.date).toISOString(),
+      })
+      for (const p of state.people) {
+        await addMeetingPerson(meeting.id, p.id)
+      }
+      if (state.chairperson_id !== null) {
+        await setChairperson(meeting.id, state.chairperson_id)
+      }
+      for (const item of state.agenda_items) {
+        await addAgendaItem(meeting.id, { text: item.text, speaker_ids: item.speaker_ids })
+      }
       queryClient.invalidateQueries({ queryKey: ['meetings'] })
       navigate(`/meetings/${meeting.id}`)
-    },
-    onError: (e) => {
-      if (e instanceof ApiError && e.status === 422) {
-        alert('Ошибка: некоторые участники не найдены в базе данных')
-      } else {
-        alert('Ошибка создания совещания')
-      }
-    },
-  })
+    } catch {
+      setSubmitError('Ошибка создания совещания. Попробуйте снова.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   function goNext() { setStep(s => s + 1) }
   function goBack() { setStep(s => s - 1) }
 
-  function fullName(p: Participant) {
+  function fullName(p: Person) {
     return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
   }
 
   const canProceedStep1 = titleInput.trim() && dateInput
-  const canProceedStep2 = state.participants.length > 0
+  const canProceedStep2 = state.people.length > 0
   const canProceedStep3 = state.chairperson_id !== null
   const canProceedStep4 = state.agenda_items.length > 0 &&
-    state.agenda_items.every(item => item.text.trim() && item.speaker_id > 0)
+    state.agenda_items.every(item => item.text.trim() && item.speaker_ids.length > 0)
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6">
@@ -171,36 +178,36 @@ export function CreateMeetingPage() {
         </div>
       )}
 
-      {/* Step 2: Participants */}
+      {/* Step 2: People */}
       {step === 2 && (
         <div className="space-y-4">
           <ParticipantSearch
-            onAdd={p => dispatch({ type: 'ADD_PARTICIPANT', participant: p })}
-            existingIds={state.participants.map(p => p.id)}
+            onAdd={p => dispatch({ type: 'ADD_PERSON', person: p })}
+            existingIds={state.people.map(p => p.id)}
           />
 
-          {state.participants.length > 0 && (
+          {state.people.length > 0 && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">
-                Список участников ({state.participants.length})
+                Список участников ({state.people.length})
               </p>
               <div className="space-y-2">
-                {state.participants.map(p => (
+                {state.people.map(p => (
                   <div key={p.id}>
-                    {editingParticipantId === p.id ? (
+                    {editingPersonId === p.id ? (
                       <div className="p-4 border rounded-lg bg-gray-50">
                         <ParticipantForm
                           defaultValues={{ last_name: p.last_name, first_name: p.first_name, middle_name: p.middle_name, info: p.info }}
-                          onSubmit={data => updateParticipantMutation.mutate({ id: p.id, data })}
-                          onCancel={() => setEditingParticipantId(null)}
-                          isLoading={updateParticipantMutation.isPending}
+                          onSubmit={data => updatePersonMutation.mutate({ id: p.id, data })}
+                          onCancel={() => setEditingPersonId(null)}
+                          isLoading={updatePersonMutation.isPending}
                         />
                       </div>
                     ) : (
                       <ParticipantCard
                         participant={p}
-                        onEdit={() => setEditingParticipantId(p.id)}
-                        onRemove={() => dispatch({ type: 'REMOVE_PARTICIPANT', id: p.id })}
+                        onEdit={() => setEditingPersonId(p.id)}
+                        onRemove={() => dispatch({ type: 'REMOVE_PERSON', id: p.id })}
                       />
                     )}
                   </div>
@@ -218,7 +225,7 @@ export function CreateMeetingPage() {
               onClick={goNext}
               className="flex-1 bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
             >
-              Готово ({state.participants.length}) →
+              Готово ({state.people.length}) →
             </button>
           </div>
         </div>
@@ -229,7 +236,7 @@ export function CreateMeetingPage() {
         <div className="space-y-4">
           <p className="text-sm text-gray-600">Выберите председательствующего:</p>
           <div className="space-y-2">
-            {state.participants.map(p => (
+            {state.people.map(p => (
               <button
                 key={p.id}
                 onClick={() => dispatch({ type: 'SET_CHAIRPERSON', id: p.id })}
@@ -276,16 +283,30 @@ export function CreateMeetingPage() {
                     placeholder="Тема пункта повестки"
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <select
-                    value={item.speaker_id || ''}
-                    onChange={e => dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, speaker_id: Number(e.target.value) } })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  >
-                    <option value="">Выберите докладчика *</option>
-                    {state.participants.map(p => (
-                      <option key={p.id} value={p.id}>{fullName(p)}</option>
-                    ))}
-                  </select>
+                  <div>
+                    <p className="text-xs font-medium text-gray-600 mb-1">Докладчики *</p>
+                    <div className="space-y-1">
+                      {state.people.map(p => {
+                        const checked = item.speaker_ids.includes(p.id)
+                        return (
+                          <label key={p.id} className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const newIds = checked
+                                  ? item.speaker_ids.filter(id => id !== p.id)
+                                  : [...item.speaker_ids, p.id]
+                                dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, speaker_ids: newIds } })
+                              }}
+                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="text-sm text-gray-700">{fullName(p)}</span>
+                          </label>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
                 <button
                   onClick={() => dispatch({ type: 'REMOVE_AGENDA_ITEM', index: i })}
@@ -334,29 +355,34 @@ export function CreateMeetingPage() {
             <div>
               <p className="text-xs text-gray-500">Председательствующий</p>
               <p className="text-sm font-medium mt-0.5">
-                {fullName(state.participants.find(p => p.id === state.chairperson_id)!)}
+                {fullName(state.people.find(p => p.id === state.chairperson_id)!)}
               </p>
             </div>
             <div>
-              <p className="text-xs text-gray-500">Участники ({state.participants.length})</p>
-              {state.participants.map(p => (
+              <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
+              {state.people.map(p => (
                 <p key={p.id} className="text-sm mt-0.5">{fullName(p)}</p>
               ))}
             </div>
             <div>
               <p className="text-xs text-gray-500">Повестка ({state.agenda_items.length} пунктов)</p>
-              {state.agenda_items.map((item, i) => (
-                <p key={i} className="text-sm mt-0.5">
-                  {i + 1}. {item.text}
-                  {' — '}
-                  {fullName(state.participants.find(p => p.id === item.speaker_id)!)}
-                </p>
-              ))}
+              {state.agenda_items.map((item, i) => {
+                const speakers = item.speaker_ids
+                  .map(id => state.people.find(p => p.id === id))
+                  .filter(Boolean)
+                  .map(p => fullName(p!))
+                  .join(', ')
+                return (
+                  <p key={i} className="text-sm mt-0.5">
+                    {i + 1}. {item.text}{speakers ? ` — ${speakers}` : ''}
+                  </p>
+                )
+              })}
             </div>
           </div>
 
-          {createMeetingMutation.isError && (
-            <p className="text-sm text-red-500">Ошибка создания. Попробуйте снова.</p>
+          {submitError && (
+            <p className="text-sm text-red-500">{submitError}</p>
           )}
 
           <div className="flex gap-3">
@@ -364,11 +390,11 @@ export function CreateMeetingPage() {
               ← Назад
             </button>
             <button
-              onClick={() => createMeetingMutation.mutate()}
-              disabled={createMeetingMutation.isPending}
+              onClick={handleSubmit}
+              disabled={isSubmitting}
               className="flex-1 bg-green-600 text-white py-3 rounded-lg text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
             >
-              {createMeetingMutation.isPending ? 'Сохранение...' : 'Зафиксировать'}
+              {isSubmitting ? 'Сохранение...' : 'Зафиксировать'}
             </button>
           </div>
         </div>

@@ -994,6 +994,63 @@ paths:
               example:
                 message: agenda item must have at least one speaker — add another speaker before removing this one
 
+  /meetings/{id}/agenda-items/{item_id}/speakers/order:
+    put:
+      tags:
+        - meetings
+      summary: Reorder speakers within an agenda item
+      description: >
+        Replaces the display order of speakers for the specified agenda item.
+        The request body must contain exactly the same set of person IDs currently
+        assigned as speakers — only their order changes. Returns 204 on success.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - person_ids
+              properties:
+                person_ids:
+                  type: array
+                  items:
+                    type: integer
+                  minItems: 1
+                  description: Speaker IDs in the desired new order (must exactly match current set)
+                  example: [42, 17]
+      responses:
+        '204':
+          description: Speakers reordered successfully
+        '404':
+          description: Meeting or agenda item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '422':
+          description: Provided IDs do not exactly match the item's current speakers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error422'
+              example:
+                message: agenda item IDs must exactly match the meeting's current agenda items
+
   /meetings/{id}/agenda-items/order:
     put:
       tags:

@@ -93,6 +93,7 @@ func main() {
 	mux.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}", mh.DeleteAgendaItem)
 	mux.HandleFunc("POST /meetings/{id}/agenda-items/{item_id}/speakers", mh.AddAgendaItemSpeaker)
 	mux.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}/speakers/{pid}", mh.RemoveAgendaItemSpeaker)
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}/speakers/order", mh.ReorderAgendaItemSpeakers)
 	mux.HandleFunc("PUT /meetings/{id}/agenda-items/order", mh.ReorderAgendaItems)
 	mux.HandleFunc("GET /meetings/{id}/export/agenda", mh.ExportAgenda)
 	mux.HandleFunc("GET /meetings/{id}/export/participants", mh.ExportParticipants)

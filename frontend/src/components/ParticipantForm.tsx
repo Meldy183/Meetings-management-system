@@ -1,16 +1,16 @@
 import { useForm } from 'react-hook-form'
-import type { ParticipantCreate } from '../api/types'
+import type { PersonCreate } from '../api/types'
 
 interface Props {
-  defaultValues?: Partial<ParticipantCreate>
-  onSubmit: (data: ParticipantCreate) => void
+  defaultValues?: Partial<PersonCreate>
+  onSubmit: (data: PersonCreate) => void
   onCancel?: () => void
   submitLabel?: string
   isLoading?: boolean
 }
 
 export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel = 'Сохранить', isLoading }: Props) {
-  const { register, handleSubmit, formState: { errors } } = useForm<ParticipantCreate>({ defaultValues })
+  const { register, handleSubmit, formState: { errors } } = useForm<PersonCreate>({ defaultValues })
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">

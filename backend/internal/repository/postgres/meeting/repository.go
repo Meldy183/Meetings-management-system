@@ -106,6 +106,10 @@ const (
 	queryDeleteAgendaItemSpeaker = `
 		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1 AND participant_id = $2`
 
+	queryUpdateAgendaItemSpeakerPosition = `
+		UPDATE agenda_item_speakers SET position = $3
+		WHERE agenda_item_id = $1 AND participant_id = $2`
+
 	queryUpdateAgendaItem = `
 		UPDATE agenda_items SET text = $3
 		WHERE id = $1 AND meeting_id = $2`
@@ -414,6 +418,21 @@ func (r *repository) AddAgendaItemSpeaker(ctx context.Context, meetingID string,
 	}
 	_, err = r.db.Exec(ctx, queryInsertAgendaItemSpeaker, itemID, speakerID, pos)
 	return err
+}
+
+func (r *repository) ReorderAgendaItemSpeakers(ctx context.Context, meetingID string, itemID int, speakerIDs []int) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	for i, sid := range speakerIDs {
+		if _, err := tx.Exec(ctx, queryUpdateAgendaItemSpeakerPosition, itemID, sid, i); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *repository) RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error {

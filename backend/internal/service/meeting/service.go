@@ -110,6 +110,7 @@ type Service interface {
 	DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) (*domMeeting.Meeting, error)
 	AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error)
 	RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error)
+	ReorderAgendaItemSpeakers(ctx context.Context, meetingID string, itemID int, speakerIDs []int) error
 }
 
 type service struct {
@@ -373,6 +374,33 @@ func (s *service) AddAgendaItemSpeaker(ctx context.Context, meetingID string, it
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) ReorderAgendaItemSpeakers(ctx context.Context, meetingID string, itemID int, speakerIDs []int) error {
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range m.AgendaItems {
+		if item.ID == itemID {
+			if len(speakerIDs) != len(item.Speakers) {
+				return &ErrAgendaItemSetMismatch{}
+			}
+			existing := make(map[int]struct{}, len(item.Speakers))
+			for _, spk := range item.Speakers {
+				existing[spk.ID] = struct{}{}
+			}
+			for _, sid := range speakerIDs {
+				if _, ok := existing[sid]; !ok {
+					return &ErrAgendaItemSetMismatch{}
+				}
+			}
+			break
+		}
+	}
+
+	return s.repo.ReorderAgendaItemSpeakers(ctx, meetingID, itemID, speakerIDs)
 }
 
 func (s *service) RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error) {

@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getParticipants, createParticipant, updateParticipant, deleteParticipant } from '../api/participants'
+import { getPeople, createPerson, updatePerson, deletePerson } from '../api/people'
 import { ApiError } from '../api/client'
 import { ParticipantForm } from '../components/ParticipantForm'
-import type { Participant, ParticipantCreate } from '../api/types'
+import type { Person, PersonCreate } from '../api/types'
 
 export function ParticipantsPage() {
   const queryClient = useQueryClient()
@@ -19,23 +19,23 @@ export function ParticipantsPage() {
   }, [query])
 
   const { data: all = [], isLoading, isError } = useQuery({
-    queryKey: ['participants', debouncedQuery],
-    queryFn: () => getParticipants(debouncedQuery || undefined),
+    queryKey: ['people', debouncedQuery],
+    queryFn: () => getPeople(debouncedQuery || undefined),
   })
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: ParticipantCreate }) => updateParticipant(id, data),
+    mutationFn: ({ id, data }: { id: number; data: PersonCreate }) => updatePerson(id, data),
     onSuccess: () => {
       setEditingId(null)
-      queryClient.invalidateQueries({ queryKey: ['participants'] })
+      queryClient.invalidateQueries({ queryKey: ['people'] })
       queryClient.invalidateQueries({ queryKey: ['meetings'] })
     },
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => deleteParticipant(id),
+    mutationFn: (id: number) => deletePerson(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['participants'] })
+      queryClient.invalidateQueries({ queryKey: ['people'] })
       queryClient.invalidateQueries({ queryKey: ['meetings'] })
     },
     onError: (e) => {
@@ -46,10 +46,10 @@ export function ParticipantsPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (data: ParticipantCreate) => createParticipant(data),
+    mutationFn: (data: PersonCreate) => createPerson(data),
     onSuccess: () => {
       setShowAddForm(false)
-      queryClient.invalidateQueries({ queryKey: ['participants'] })
+      queryClient.invalidateQueries({ queryKey: ['people'] })
     },
     onError: (e) => {
       if (e instanceof ApiError && e.status === 409) {
@@ -82,7 +82,7 @@ export function ParticipantsPage() {
               {query ? 'Никого не найдено' : 'Список пуст'}
             </p>
           )}
-          {all.map((p: Participant) => (
+          {all.map((p: Person) => (
             <div key={p.id}>
               {editingId === p.id ? (
                 <div className="p-4 border rounded-lg bg-gray-50">

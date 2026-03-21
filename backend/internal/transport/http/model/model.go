@@ -89,6 +89,10 @@ type AddAgendaItemSpeakerRequest struct {
 	PersonID int `json:"person_id"`
 }
 
+type ReorderAgendaItemSpeakersRequest struct {
+	PersonIDs []int `json:"person_ids"`
+}
+
 type ErrorResponse struct {
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`

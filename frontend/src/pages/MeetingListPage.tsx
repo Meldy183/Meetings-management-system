@@ -40,11 +40,22 @@ export function MeetingListPage() {
                 to={`/meetings/${meeting.id}`}
                 className="block p-4 bg-white border rounded-lg hover:border-blue-400 transition-colors"
               >
-                <p className="font-medium text-sm text-gray-900 leading-snug">{meeting.title}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-sm text-gray-900 leading-snug">{meeting.title}</p>
+                  {meeting.status === 'incomplete' && (
+                    <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                      Не готово
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 mt-1">{formatDate(meeting.date)}</p>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {meeting.chairperson.last_name} {meeting.chairperson.first_name}
-                </p>
+                {meeting.chairperson ? (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {meeting.chairperson.last_name} {meeting.chairperson.first_name}
+                  </p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-0.5 italic">Председатель не назначен</p>
+                )}
               </Link>
             ))}
             {data.items.length === 0 && (
