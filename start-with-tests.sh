@@ -2,4 +2,8 @@
 set -e
 
 docker network prune -f
-docker compose --profile test up --build --pull never "$@"
+
+# Build with legacy builder (skips registry manifest checks when images are cached locally)
+DOCKER_BUILDKIT=0 docker compose --profile test build --pull=false
+
+docker compose --profile test up "$@"
