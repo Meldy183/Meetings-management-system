@@ -36,8 +36,14 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	for i, item := range m.AgendaItems {
 		roman := toRoman(i + 1)
 		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 27)))
-		body.WriteString(para(pPrCenter() + tnrBoldUnderline("Докладчик:", 27)))
-		body.WriteString(agendaTable(item.Speaker))
+		label := "Докладчик:"
+		if len(item.Speakers) > 1 {
+			label = "Докладчики:"
+		}
+		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 27)))
+		for _, spk := range item.Speakers {
+			body.WriteString(agendaTable(spk))
+		}
 		body.WriteString(para(pPrLeft())) // spacer between items
 	}
 

@@ -74,6 +74,18 @@ func (e *ErrSpeakerNotInMeeting) Error() string {
 	return "speaker must be a person in this meeting"
 }
 
+type ErrLastSpeaker struct{}
+
+func (e *ErrLastSpeaker) Error() string {
+	return "agenda item must have at least one speaker — add another speaker before removing this one"
+}
+
+type ErrSpeakerAlreadyOnItem struct{}
+
+func (e *ErrSpeakerAlreadyOnItem) Error() string {
+	return "person is already a speaker on this agenda item"
+}
+
 type ErrMeetingIncomplete struct{}
 
 func (e *ErrMeetingIncomplete) Error() string {
@@ -93,9 +105,11 @@ type Service interface {
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
 	AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
 	RemovePerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
-	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (*domMeeting.Meeting, error)
-	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) (*domMeeting.Meeting, error)
+	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (*domMeeting.Meeting, error)
+	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) (*domMeeting.Meeting, error)
 	DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) (*domMeeting.Meeting, error)
+	AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error)
+	RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error)
 }
 
 type service struct {
@@ -249,8 +263,10 @@ func (s *service) RemovePerson(ctx context.Context, meetingID string, personID i
 		return nil, &ErrChairpersonRemoval{}
 	}
 	for _, item := range m.AgendaItems {
-		if item.Speaker.ID == personID {
-			return nil, &ErrSpeakerRemoval{}
+		for _, spk := range item.Speakers {
+			if spk.ID == personID {
+				return nil, &ErrSpeakerRemoval{}
+			}
 		}
 	}
 
@@ -260,30 +276,37 @@ func (s *service) RemovePerson(ctx context.Context, meetingID string, personID i
 	return s.repo.GetByID(ctx, meetingID)
 }
 
-func (s *service) AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (*domMeeting.Meeting, error) {
+func (s *service) AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (*domMeeting.Meeting, error) {
+	if len(speakerIDs) == 0 {
+		return nil, &ErrLastSpeaker{}
+	}
+
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return nil, err
 	}
 
-	found := false
+	peopleSet := make(map[int]struct{}, len(m.People))
 	for _, p := range m.People {
-		if p.ID == speakerID {
-			found = true
-			break
+		peopleSet[p.ID] = struct{}{}
+	}
+	for _, sid := range speakerIDs {
+		if _, ok := peopleSet[sid]; !ok {
+			return nil, &ErrSpeakerNotInMeeting{}
 		}
 	}
-	if !found {
-		return nil, &ErrSpeakerNotInMeeting{}
-	}
 
-	if _, err := s.repo.AddAgendaItem(ctx, meetingID, text, speakerID); err != nil {
+	if _, err := s.repo.AddAgendaItem(ctx, meetingID, text, speakerIDs); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)
 }
 
-func (s *service) UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) (*domMeeting.Meeting, error) {
+func (s *service) UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) (*domMeeting.Meeting, error) {
+	if len(speakerIDs) == 0 {
+		return nil, &ErrLastSpeaker{}
+	}
+
 	m, err := s.repo.GetByID(ctx, meetingID)
 	if err != nil {
 		return nil, err
@@ -300,18 +323,75 @@ func (s *service) UpdateAgendaItem(ctx context.Context, meetingID string, itemID
 		return nil, errs.ErrNotFound
 	}
 
-	speakerFound := false
+	peopleSet := make(map[int]struct{}, len(m.People))
+	for _, p := range m.People {
+		peopleSet[p.ID] = struct{}{}
+	}
+	for _, sid := range speakerIDs {
+		if _, ok := peopleSet[sid]; !ok {
+			return nil, &ErrSpeakerNotInMeeting{}
+		}
+	}
+
+	if err := s.repo.UpdateAgendaItem(ctx, meetingID, itemID, text, speakerIDs); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error) {
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Speaker must be in the meeting's people list.
+	inMeeting := false
 	for _, p := range m.People {
 		if p.ID == speakerID {
-			speakerFound = true
+			inMeeting = true
 			break
 		}
 	}
-	if !speakerFound {
+	if !inMeeting {
 		return nil, &ErrSpeakerNotInMeeting{}
 	}
 
-	if err := s.repo.UpdateAgendaItem(ctx, meetingID, itemID, text, speakerID); err != nil {
+	// Must not already be a speaker on this item.
+	for _, item := range m.AgendaItems {
+		if item.ID == itemID {
+			for _, spk := range item.Speakers {
+				if spk.ID == speakerID {
+					return nil, &ErrSpeakerAlreadyOnItem{}
+				}
+			}
+			break
+		}
+	}
+
+	if err := s.repo.AddAgendaItemSpeaker(ctx, meetingID, itemID, speakerID); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) (*domMeeting.Meeting, error) {
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Find the item and enforce at-least-one-speaker constraint.
+	for _, item := range m.AgendaItems {
+		if item.ID == itemID {
+			if len(item.Speakers) <= 1 {
+				return nil, &ErrLastSpeaker{}
+			}
+			break
+		}
+	}
+
+	if err := s.repo.RemoveAgendaItemSpeaker(ctx, meetingID, itemID, speakerID); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)

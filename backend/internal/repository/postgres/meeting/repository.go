@@ -21,11 +21,6 @@ const (
 		VALUES ($1, $2)
 		RETURNING id, created_at`
 
-	queryInsertAgendaItem = `
-		INSERT INTO agenda_items (meeting_id, position, text, speaker_id)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id`
-
 	queryInsertMeetingParticipant = `
 		INSERT INTO meeting_participants (meeting_id, participant_id, position)
 		VALUES ($1, $2, $3)`
@@ -48,11 +43,17 @@ const (
 		WHERE m.id = $1`
 
 	queryGetAgendaItems = `
-		SELECT ai.id, ai.text, p.id, p.last_name, p.first_name, p.middle_name, p.info
-		FROM agenda_items ai
-		JOIN participants p ON p.id = ai.speaker_id
-		WHERE ai.meeting_id = $1
-		ORDER BY ai.position`
+		SELECT id, text
+		FROM agenda_items
+		WHERE meeting_id = $1
+		ORDER BY position`
+
+	queryGetAgendaItemSpeakers = `
+		SELECT ais.agenda_item_id, p.id, p.last_name, p.first_name, p.middle_name, p.info
+		FROM agenda_item_speakers ais
+		JOIN participants p ON p.id = ais.participant_id
+		WHERE ais.agenda_item_id = ANY($1)
+		ORDER BY ais.agenda_item_id, ais.position`
 
 	queryGetMeetingPeople = `
 		SELECT p.id, p.last_name, p.first_name, p.middle_name, p.info
@@ -88,15 +89,27 @@ const (
 		DELETE FROM meeting_participants WHERE meeting_id = $1 AND participant_id = $2`
 
 	queryAddAgendaItem = `
-		INSERT INTO agenda_items (meeting_id, position, text, speaker_id)
+		INSERT INTO agenda_items (meeting_id, position, text)
 		VALUES ($1,
 		  (SELECT COALESCE(MAX(position), -1) + 1 FROM agenda_items WHERE meeting_id = $1),
-		  $2, $3)
+		  $2)
 		RETURNING id`
 
+	queryInsertAgendaItemSpeaker = `
+		INSERT INTO agenda_item_speakers (agenda_item_id, participant_id, position)
+		VALUES ($1, $2, $3)
+		ON CONFLICT DO NOTHING`
+
+	queryDeleteAgendaItemSpeakers = `
+		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1`
+
+	queryDeleteAgendaItemSpeaker = `
+		DELETE FROM agenda_item_speakers WHERE agenda_item_id = $1 AND participant_id = $2`
+
 	queryUpdateAgendaItem = `
-		UPDATE agenda_items SET text = $3, speaker_id = $4
+		UPDATE agenda_items SET text = $3
 		WHERE id = $1 AND meeting_id = $2`
+
 
 	queryDeleteAgendaItem = `
 		DELETE FROM agenda_items WHERE id = $1 AND meeting_id = $2`
@@ -189,17 +202,41 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 		return nil, err
 	}
 	defer aRows.Close()
+	var itemIDs []int
 	for aRows.Next() {
 		var item meeting.AgendaItem
-		var spk person.Person
-		if err := aRows.Scan(&item.ID, &item.Text, &spk.ID, &spk.LastName, &spk.FirstName, &spk.MiddleName, &spk.Info); err != nil {
+		if err := aRows.Scan(&item.ID, &item.Text); err != nil {
 			return nil, err
 		}
-		item.Speaker = spk
 		m.AgendaItems = append(m.AgendaItems, item)
+		itemIDs = append(itemIDs, item.ID)
 	}
 	if err := aRows.Err(); err != nil {
 		return nil, err
+	}
+
+	// Load speakers for all agenda items in one query.
+	if len(itemIDs) > 0 {
+		sRows, err := r.db.Query(ctx, queryGetAgendaItemSpeakers, itemIDs)
+		if err != nil {
+			return nil, err
+		}
+		defer sRows.Close()
+		speakersByItem := make(map[int][]person.Person)
+		for sRows.Next() {
+			var itemID int
+			var spk person.Person
+			if err := sRows.Scan(&itemID, &spk.ID, &spk.LastName, &spk.FirstName, &spk.MiddleName, &spk.Info); err != nil {
+				return nil, err
+			}
+			speakersByItem[itemID] = append(speakersByItem[itemID], spk)
+		}
+		if err := sRows.Err(); err != nil {
+			return nil, err
+		}
+		for i := range m.AgendaItems {
+			m.AgendaItems[i].Speakers = speakersByItem[m.AgendaItems[i].ID]
+		}
 	}
 
 	// People
@@ -311,14 +348,76 @@ func (r *repository) RemovePerson(ctx context.Context, meetingID string, personI
 	return nil
 }
 
-func (r *repository) AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (int, error) {
+func (r *repository) AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (int, error) {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+
 	var id int
-	err := r.db.QueryRow(ctx, queryAddAgendaItem, meetingID, text, speakerID).Scan(&id)
-	return id, err
+	if err := tx.QueryRow(ctx, queryAddAgendaItem, meetingID, text).Scan(&id); err != nil {
+		return 0, err
+	}
+	for i, sid := range speakerIDs {
+		if _, err := tx.Exec(ctx, queryInsertAgendaItemSpeaker, id, sid, i); err != nil {
+			return 0, err
+		}
+	}
+	return id, tx.Commit(ctx)
 }
 
-func (r *repository) UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) error {
-	tag, err := r.db.Exec(ctx, queryUpdateAgendaItem, itemID, meetingID, text, speakerID)
+func (r *repository) UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	tag, err := tx.Exec(ctx, queryUpdateAgendaItem, itemID, meetingID, text)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, queryDeleteAgendaItemSpeakers, itemID); err != nil {
+		return err
+	}
+	for i, sid := range speakerIDs {
+		if _, err := tx.Exec(ctx, queryInsertAgendaItemSpeaker, itemID, sid, i); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *repository) AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error {
+	// Verify the item belongs to the meeting, then append speaker at next position.
+	var exists bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM agenda_items WHERE id = $1 AND meeting_id = $2)`,
+		itemID, meetingID,
+	).Scan(&exists)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return errs.ErrNotFound
+	}
+	var pos int
+	if err := r.db.QueryRow(ctx,
+		`SELECT COALESCE(MAX(position), -1) + 1 FROM agenda_item_speakers WHERE agenda_item_id = $1`,
+		itemID,
+	).Scan(&pos); err != nil {
+		return err
+	}
+	_, err = r.db.Exec(ctx, queryInsertAgendaItemSpeaker, itemID, speakerID, pos)
+	return err
+}
+
+func (r *repository) RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error {
+	tag, err := r.db.Exec(ctx, queryDeleteAgendaItemSpeaker, itemID, speakerID)
 	if err != nil {
 		return err
 	}

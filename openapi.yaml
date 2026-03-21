@@ -430,7 +430,72 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
 
-  /meetings/{id}/chairperson:
+  /meetings/{id}/meta:
+    get:
+      tags:
+        - meetings
+      summary: Get meeting metadata (no lists)
+      description: >
+        Returns meeting metadata only — id, title, date, chairperson, status,
+        and created_at. Does not include people or agenda_items.
+        Useful when the client only needs header information without fetching
+        the full meeting payload.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Meeting metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeetingSummary'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+
+  /meetings/{id}/people:
+    get:
+      tags:
+        - meetings
+      summary: Get meeting people list
+      description: >
+        Returns the ordered list of people currently registered for this
+        meeting. Order matches the display order set via
+        PUT /meetings/{id}/people/order.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Ordered list of people in the meeting
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Person'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+    post:
+      tags:
     put:
       tags:
         - meetings
@@ -480,7 +545,6 @@ paths:
               example:
                 message: chairperson must be a person in this meeting
 
-  /meetings/{id}/people:
     post:
       tags:
         - meetings
@@ -643,14 +707,45 @@ paths:
                 message: person IDs must exactly match the meeting's current people
 
   /meetings/{id}/agenda-items:
+    get:
+      tags:
+        - meetings
+      summary: Get meeting agenda items
+      description: >
+        Returns the ordered list of agenda items for this meeting, each
+        including the resolved speaker. Order matches the display order set
+        via PUT /meetings/{id}/agenda-items/order.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+      responses:
+        '200':
+          description: Ordered list of agenda items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AgendaItem'
+        '404':
+          description: Meeting not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
     post:
       tags:
         - meetings
       summary: Add an agenda item to an existing meeting
       description: >
-        Appends a new agenda item to the meeting. The speaker_id must
-        already be a person in this meeting (returns 422 otherwise).
-        Returns the full updated Meeting object.
+        Appends a new agenda item to the meeting. All speaker_ids must
+        already be people in this meeting (returns 422 otherwise).
+        At least one speaker_id is required. Returns the full updated Meeting object.
       parameters:
         - name: id
           in: path
@@ -668,7 +763,7 @@ paths:
               $ref: '#/components/schemas/AgendaItemUpsert'
             example:
               text: Новый пункт повестки
-              speaker_id: 42
+              speaker_ids: [42]
       responses:
         '201':
           description: Agenda item added; returns updated meeting
@@ -683,7 +778,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '422':
-          description: speaker_id is not a person in this meeting
+          description: One or more speaker_ids are not people in this meeting
           content:
             application/json:
               schema:
@@ -697,9 +792,10 @@ paths:
         - meetings
       summary: Update an agenda item
       description: >
-        Updates the text and/or speaker of the specified agenda item.
-        The new speaker_id must already be a person in this meeting
-        (returns 422 otherwise). Returns the full updated Meeting object.
+        Replaces the text and speaker list of the specified agenda item.
+        All speaker_ids must already be people in this meeting (returns 422 otherwise).
+        Speakers are fully replaced — include all desired speakers in the request.
+        Returns the full updated Meeting object.
       parameters:
         - name: id
           in: path
@@ -724,7 +820,7 @@ paths:
               $ref: '#/components/schemas/AgendaItemUpsert'
             example:
               text: Обновлённый текст пункта
-              speaker_id: 17
+              speaker_ids: [17, 42]
       responses:
         '200':
           description: Agenda item updated; returns updated meeting
@@ -739,7 +835,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
         '422':
-          description: speaker_id is not a person in this meeting
+          description: One or more speaker_ids are not people in this meeting
           content:
             application/json:
               schema:
@@ -783,6 +879,120 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorNotFound'
+
+  /meetings/{id}/agenda-items/{item_id}/speakers:
+    post:
+      tags:
+        - meetings
+      summary: Add a speaker to an agenda item
+      description: >
+        Adds an existing person as a speaker on the specified agenda item.
+        The person must already be in the meeting's people list.
+        Returns 409 if the person is already a speaker on this item.
+        Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddAgendaItemSpeaker'
+            example:
+              person_id: 17
+      responses:
+        '200':
+          description: Speaker added; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting or agenda item not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Person is already a speaker on this agenda item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: person is already a speaker on this agenda item
+        '422':
+          description: Person is not in the meeting's people list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorUnprocessableEntity'
+              example:
+                message: speaker must be a person in this meeting
+
+  /meetings/{id}/agenda-items/{item_id}/speakers/{pid}:
+    delete:
+      tags:
+        - meetings
+      summary: Remove a speaker from an agenda item
+      description: >
+        Removes the specified person from the speakers list of the agenda item.
+        Returns 409 if this is the last speaker (at least one must remain).
+        Returns the full updated Meeting object.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        - name: item_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+        - name: pid
+          in: path
+          required: true
+          description: ID of the person to remove as a speaker
+          schema:
+            type: integer
+          example: 17
+      responses:
+        '200':
+          description: Speaker removed; returns updated meeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Meeting'
+        '404':
+          description: Meeting, agenda item, or speaker not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorNotFound'
+        '409':
+          description: Cannot remove — this is the last speaker on the item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorConflict'
+              example:
+                message: agenda item must have at least one speaker — add another speaker before removing this one
 
   /meetings/{id}/agenda-items/order:
     put:
@@ -1067,12 +1277,12 @@ components:
     AgendaItemCreate:
       type: object
       description: >
-        A single agenda item submitted when creating a meeting.
-        Each item has its own speaker (докладчик), who must be present
+        Payload for creating or fully replacing an agenda item.
+        At least one speaker ID is required; all speakers must already be
         in the meeting's people list.
       required:
         - text
-        - speaker_id
+        - speaker_ids
       properties:
         text:
           type: string
@@ -1080,22 +1290,25 @@ components:
             Topic/title of the agenda item as it will appear
             in the Повестка document
           example: Об институте AIRI и видении применения ИИ в науке
-        speaker_id:
-          type: integer
+        speaker_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
           description: >
-            ID of the person presenting this item (докладчик).
-            Must already be in the meeting's people list.
-          example: 17
+            IDs of the people presenting this item (докладчики).
+            All IDs must already be in the meeting's people list.
+          example: [17, 42]
 
     AgendaItem:
       type: object
       description: >
-        An agenda item with its speaker fully resolved.
+        An agenda item with its speakers fully resolved.
         The id field is used when reordering via PUT /meetings/{id}/agenda-items/order.
       required:
         - id
         - text
-        - speaker
+        - speakers
       properties:
         id:
           type: integer
@@ -1104,8 +1317,24 @@ components:
         text:
           type: string
           example: Об институте AIRI и видении применения ИИ в науке
-        speaker:
-          $ref: '#/components/schemas/Person'
+        speakers:
+          type: array
+          items:
+            $ref: '#/components/schemas/Person'
+          description: Ordered list of speakers for this agenda item (at least one)
+
+    AddAgendaItemSpeaker:
+      type: object
+      description: Payload for adding a speaker to an existing agenda item.
+      required:
+        - person_id
+      properties:
+        person_id:
+          type: integer
+          description: >
+            ID of the person to add as a speaker.
+            Must already be in the meeting's people list.
+          example: 17
 
     MeetingCreate:
       type: object
@@ -1273,22 +1502,26 @@ components:
     AgendaItemUpsert:
       type: object
       description: >
-        Payload for creating or updating an agenda item.
+        Payload for creating or fully replacing an agenda item.
         Used by both POST /meetings/{id}/agenda-items and PUT /meetings/{id}/agenda-items/{item_id}.
+        All speakers are replaced atomically on PUT. At least one speaker is required.
       required:
         - text
-        - speaker_id
+        - speaker_ids
       properties:
         text:
           type: string
           description: Topic/title of the agenda item
           example: Об институте AIRI и видении применения ИИ в науке
-        speaker_id:
-          type: integer
+        speaker_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
           description: >
-            ID of the person presenting this item (докладчик).
-            Must already be in the meeting's people list.
-          example: 42
+            IDs of the people presenting this item (докладчики).
+            All IDs must already be in the meeting's people list.
+          example: [17, 42]
 
     ErrorNotFound:
       type: object
@@ -1329,3 +1562,15 @@ components:
             invalid_person_ids:
               - 99
               - 100
+
+    ErrorUnprocessableEntity:
+      $ref: '#/components/schemas/Error422'
+
+    ErrorBadRequest:
+      type: object
+      description: Bad request — missing or malformed input.
+      properties:
+        message:
+          type: string
+          description: Human-readable error summary
+          example: title and date are required

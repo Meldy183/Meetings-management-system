@@ -27,9 +27,9 @@ type PersonResponse struct {
 }
 
 type AgendaItemResponse struct {
-	ID      int            `json:"id"`
-	Text    string         `json:"text"`
-	Speaker PersonResponse `json:"speaker"`
+	ID       int              `json:"id"`
+	Text     string           `json:"text"`
+	Speakers []PersonResponse `json:"speakers"`
 }
 
 type MeetingResponse struct {
@@ -81,8 +81,12 @@ type AddMeetingPersonRequest struct {
 }
 
 type AgendaItemUpsertRequest struct {
-	Text      string `json:"text"`
-	SpeakerID int    `json:"speaker_id"`
+	Text       string `json:"text"`
+	SpeakerIDs []int  `json:"speaker_ids"`
+}
+
+type AddAgendaItemSpeakerRequest struct {
+	PersonID int `json:"person_id"`
 }
 
 type ErrorResponse struct {

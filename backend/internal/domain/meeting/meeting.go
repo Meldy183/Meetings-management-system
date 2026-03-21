@@ -7,9 +7,9 @@ import (
 )
 
 type AgendaItem struct {
-	ID      int
-	Text    string
-	Speaker person.Person
+	ID       int
+	Text     string
+	Speakers []person.Person
 }
 
 type Meeting struct {
@@ -41,7 +41,9 @@ type Repository interface {
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
 	AddPerson(ctx context.Context, meetingID string, personID int) error
 	RemovePerson(ctx context.Context, meetingID string, personID int) error
-	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerID int) (int, error)
-	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerID int) error
+	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (int, error)
+	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) error
 	DeleteAgendaItem(ctx context.Context, meetingID string, itemID int) error
+	AddAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error
+	RemoveAgendaItemSpeaker(ctx context.Context, meetingID string, itemID int, speakerID int) error
 }

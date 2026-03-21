@@ -274,12 +274,12 @@ func (h *MeetingHandler) AddAgendaItem(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
 	}
-	if req.Text == "" || req.SpeakerID == 0 {
-		respondError(w, http.StatusBadRequest, "text and speaker_id are required", nil)
+	if req.Text == "" || len(req.SpeakerIDs) == 0 {
+		respondError(w, http.StatusBadRequest, "text and speaker_ids are required", nil)
 		return
 	}
 
-	m, err := h.svc.AddAgendaItem(r.Context(), id, req.Text, req.SpeakerID)
+	m, err := h.svc.AddAgendaItem(r.Context(), id, req.Text, req.SpeakerIDs)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting not found", nil)
@@ -311,12 +311,12 @@ func (h *MeetingHandler) UpdateAgendaItem(w http.ResponseWriter, r *http.Request
 		respondError(w, http.StatusBadRequest, "invalid request body", nil)
 		return
 	}
-	if req.Text == "" || req.SpeakerID == 0 {
-		respondError(w, http.StatusBadRequest, "text and speaker_id are required", nil)
+	if req.Text == "" || len(req.SpeakerIDs) == 0 {
+		respondError(w, http.StatusBadRequest, "text and speaker_ids are required", nil)
 		return
 	}
 
-	m, err := h.svc.UpdateAgendaItem(r.Context(), id, itemID, req.Text, req.SpeakerID)
+	m, err := h.svc.UpdateAgendaItem(r.Context(), id, itemID, req.Text, req.SpeakerIDs)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
@@ -347,6 +347,73 @@ func (h *MeetingHandler) DeleteAgendaItem(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// POST /meetings/{id}/agenda-items/{item_id}/speakers
+func (h *MeetingHandler) AddAgendaItemSpeaker(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	itemIDStr := r.PathValue("item_id")
+	itemID, err := strconv.Atoi(itemIDStr)
+	if id == "" || err != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	var req model.AddAgendaItemSpeakerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.PersonID == 0 {
+		respondError(w, http.StatusBadRequest, "person_id is required", nil)
+		return
+	}
+
+	m, err := h.svc.AddAgendaItemSpeaker(r.Context(), id, itemID, req.PersonID)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting or agenda item not found", nil)
+			return
+		}
+		var e1 *svcMeeting.ErrSpeakerNotInMeeting
+		if errors.As(err, &e1) {
+			respondError(w, http.StatusUnprocessableEntity, e1.Error(), nil)
+			return
+		}
+		var e2 *svcMeeting.ErrSpeakerAlreadyOnItem
+		if errors.As(err, &e2) {
+			respondError(w, http.StatusConflict, e2.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// DELETE /meetings/{id}/agenda-items/{item_id}/speakers/{pid}
+func (h *MeetingHandler) RemoveAgendaItemSpeaker(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	itemIDStr := r.PathValue("item_id")
+	pidStr := r.PathValue("pid")
+	itemID, err1 := strconv.Atoi(itemIDStr)
+	pid, err2 := strconv.Atoi(pidStr)
+	if id == "" || err1 != nil || err2 != nil {
+		respondError(w, http.StatusBadRequest, "invalid path parameters", nil)
+		return
+	}
+
+	m, err := h.svc.RemoveAgendaItemSpeaker(r.Context(), id, itemID, pid)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting, agenda item, or speaker not found", nil)
+			return
+		}
+		var e *svcMeeting.ErrLastSpeaker
+		if errors.As(err, &e) {
+			respondError(w, http.StatusConflict, e.Error(), nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
@@ -425,6 +492,49 @@ func (h *MeetingHandler) ReorderAgendaItems(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /meetings/{id}/meta
+func (h *MeetingHandler) GetMeta(w http.ResponseWriter, r *http.Request) {
+	m, ok := h.fetchMeeting(w, r)
+	if !ok {
+		return
+	}
+	respond(w, http.StatusOK, toMeetingSummaryResponse(m))
+}
+
+// GET /meetings/{id}/people
+func (h *MeetingHandler) GetPeople(w http.ResponseWriter, r *http.Request) {
+	m, ok := h.fetchMeeting(w, r)
+	if !ok {
+		return
+	}
+	people := make([]model.PersonResponse, 0, len(m.People))
+	for _, p := range m.People {
+		people = append(people, toPersonResp(p))
+	}
+	respond(w, http.StatusOK, people)
+}
+
+// GET /meetings/{id}/agenda-items
+func (h *MeetingHandler) GetAgendaItems(w http.ResponseWriter, r *http.Request) {
+	m, ok := h.fetchMeeting(w, r)
+	if !ok {
+		return
+	}
+	items := make([]model.AgendaItemResponse, 0, len(m.AgendaItems))
+	for _, item := range m.AgendaItems {
+		speakers := make([]model.PersonResponse, 0, len(item.Speakers))
+		for _, spk := range item.Speakers {
+			speakers = append(speakers, toPersonResp(spk))
+		}
+		items = append(items, model.AgendaItemResponse{
+			ID:       item.ID,
+			Text:     item.Text,
+			Speakers: speakers,
+		})
+	}
+	respond(w, http.StatusOK, items)
 }
 
 // GET /meetings/{id}/export/agenda
@@ -544,10 +654,14 @@ func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
 
 	items := make([]model.AgendaItemResponse, 0, len(m.AgendaItems))
 	for _, item := range m.AgendaItems {
+		speakers := make([]model.PersonResponse, 0, len(item.Speakers))
+		for _, spk := range item.Speakers {
+			speakers = append(speakers, toPersonResp(spk))
+		}
 		items = append(items, model.AgendaItemResponse{
-			ID:      item.ID,
-			Text:    item.Text,
-			Speaker: toPersonResp(item.Speaker),
+			ID:       item.ID,
+			Text:     item.Text,
+			Speakers: speakers,
 		})
 	}
 
