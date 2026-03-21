@@ -9,13 +9,14 @@ services:
       POSTGRES_PASSWORD: meetings
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./postgres-initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U meetings -d meetings_editor"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # 2. Database migrations (runs once, then exits)
+  # 2. Database migrations — production DB (runs once, then exits)
   migrate:
     image: migrate/migrate:v4.18.1
     depends_on:
@@ -29,6 +30,34 @@ services:
       - "up"
     restart: on-failure
 
+  # 2b. Database migrations — test DB (only with --profile test)
+  migrate-test:
+    profiles: [test]
+    image: migrate/migrate:v4.18.1
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/migrations:/migrations
+    command:
+      - "-path=/migrations"
+      - "-database=postgres://meetings:meetings@db:5432/meetings_editor_test?sslmode=disable"
+      - "up"
+    restart: on-failure
+
+  # 2c. Run the full Go test suite against the test DB (only with --profile test)
+  run-tests:
+    profiles: [test]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: test
+    depends_on:
+      migrate-test:
+        condition: service_completed_successfully
+    environment:
+      TEST_DATABASE_URL: postgres://meetings:meetings@db:5432/meetings_editor_test?sslmode=disable
+
   # 3. Go backend (internal only — nginx proxies to it)
   backend:
     build:
@@ -39,6 +68,9 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      run-tests:
+        condition: service_completed_successfully
+        required: false
     environment:
       DATABASE_URL: postgres://meetings:meetings@db:5432/meetings_editor?sslmode=disable
       PORT: 8080
