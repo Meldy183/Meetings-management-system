@@ -108,7 +108,7 @@ func (r *repository) Search(ctx context.Context, words []string) ([]person.Perso
 			sb.WriteString(" AND ")
 		}
 		sb.WriteString(fmt.Sprintf(
-			`lower(last_name || ' ' || first_name || ' ' || middle_name) LIKE '%%' || lower($%d) || '%%'`, i+1))
+			`(last_name || ' ' || first_name || ' ' || middle_name) ~* ('\y' || $%d || '\y')`, i+1))
 		args[i] = w
 	}
 	sb.WriteString(` ORDER BY last_name, first_name LIMIT 100`)

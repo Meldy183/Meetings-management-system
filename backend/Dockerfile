@@ -18,7 +18,7 @@ RUN go mod download
 
 COPY . .
 
-CMD ["go", "test", "./..."]
+CMD ["go", "test", "-p", "1", "./..."]
 
 # ---- runtime ----
 FROM alpine:3.20
