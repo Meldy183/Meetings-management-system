@@ -1,6 +1,7 @@
 # MCP Layer
 
-This document covers the design decisions and implementation details for the MCP server.
+> **Status: not the primary programmatic interface.**
+> The console client (`console/`) is the primary way to drive the system programmatically. The MCP server is kept in the repository for reference. OpenClaw (the target AI agent) does not have native MCP support — it uses the console client via the skill defined in `skills/meetings-console/SKILL.md`.
 
 ---
 
@@ -18,7 +19,7 @@ MCP is a JSON-RPC 2.0 protocol. The agent calls `tools/list` on startup to disco
 AI agent
     │  MCP / HTTP POST  :3000/mcp
     ▼
-MCP Server  (new Go service)
+MCP Server  (separate Go binary in mcp/)
     │  HTTP REST  :8080
     ▼
 Backend
@@ -32,23 +33,13 @@ The MCP server is a **separate Go binary** — completely decoupled from the bac
 
 **Library:** `github.com/metoro-io/mcp-golang` v0.16
 
-Chosen because it uses Go structs for tool argument definitions — the library reflects on the struct at registration time to generate the JSON schema. This means compile-time safety: if the struct is wrong, the build fails before any tests run.
-
 **Transport:** HTTP (stateless POST), not stdio
 
-The agent connects to a running service over the network. This allows the agent to be on a different machine and does not require the MCP server to be launched as a child process.
+**Deployment:** Separate service in Docker Compose (port 3000)
 
-**Deployment:** Separate service in Docker Compose
+**Tool scope:** 1-to-1 with REST endpoints, with two exclusions — `DELETE /people/{id}` and `DELETE /meetings/{id}` are intentionally excluded (destructive operations not appropriate for agent automation).
 
-The MCP server runs alongside the backend. Inside Docker, it reaches the backend via `http://backend:8080`. Externally, agents connect to port 3000.
-
-**Tool scope:** 1-to-1 with REST endpoints, with two exclusions
-
-`DELETE /people/{id}` and `DELETE /meetings/{id}` are intentionally excluded — these are destructive operations not appropriate for agent automation.
-
-**Export tools:** return base64-encoded `.docx` content
-
-Since the agent cannot directly download files, `export_agenda` and `export_participants` fetch the document from the backend and return it as base64 text with a filename hint. The agent can decode and save it.
+**Export tools:** return base64-encoded `.docx` content + filename.
 
 ---
 
@@ -131,10 +122,3 @@ curl -s -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_people","arguments":{"query":""}}}' | jq .
 ```
-
----
-
-## Deferred
-
-- Authentication on the MCP endpoint (currently open)
-- Telegram Mini App integration

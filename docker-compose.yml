@@ -91,7 +91,20 @@ services:
     ports:
       - "3000:3000"
 
-  # 5. React frontend (nginx)
+  # 5. Console REPL — interactive client (run with: docker compose run --rm console)
+  console:
+    profiles: [console]
+    build:
+      context: ./console
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8080
+    stdin_open: true
+    tty: true
+
+  # 6. React frontend (nginx)
   frontend:
     build:
       context: ./frontend

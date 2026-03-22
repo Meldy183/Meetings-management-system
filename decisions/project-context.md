@@ -12,7 +12,7 @@ A web app (future: Telegram Mini App) for a secretary/admin to record official m
 
 **Primary user:** A secretary who organises meetings and needs to produce government-style `.docx` documents.
 
-**Design principle:** All business logic lives in the backend. Every action available in the UI has a corresponding API endpoint, and every API endpoint has a corresponding MCP tool — so AI agents can drive the entire workflow programmatically.
+**Design principle:** All business logic lives in the backend. Every action available in the UI has a corresponding API endpoint, and every API endpoint has a corresponding console command — so AI agents and developers can drive the entire workflow programmatically via the console client.
 
 ---
 
@@ -22,7 +22,11 @@ A web app (future: Telegram Mini App) for a secretary/admin to record official m
 meetings-editor/
 ├── backend/          # Go HTTP server
 ├── frontend/         # React SPA
-├── mcp/              # MCP server (wraps REST API as AI tools)
+├── console/          # Interactive REPL client (Go, stdlib only)
+├── mcp/              # MCP server (kept for reference, not primary interface)
+├── skills/
+│   └── meetings-console/
+│       └── SKILL.md  # OpenClaw agent skill — full command reference
 ├── decisions/        # Architecture decisions and plans
 │   ├── project-context.md   ← you are here
 │   ├── frontend-plan.md
@@ -43,9 +47,10 @@ meetings-editor/
 | Search index | pg_trgm GIN index on person name (migration 002) |
 | Document generation | Raw OOXML — generated in-memory, no external library |
 | Frontend | React 18 + TypeScript, Vite, TanStack Query v5, Tailwind CSS |
-| MCP server | Go 1.22+, metoro-io/mcp-golang v0.16, HTTP transport |
+| Console client | Go 1.22+, stdlib only — interactive REPL for programmatic access |
+| AI agent skills | OpenClaw / ClawHub (`skills/meetings-console/SKILL.md`) |
 | API contract | OpenAPI 3.0.3 — `openapi.yaml` at repo root |
-| Deployment | Docker Compose (db → migrate → backend → mcp + nginx/frontend) |
+| Deployment | Docker Compose (db → migrate → backend + nginx/frontend) |
 
 ---
 
@@ -98,7 +103,7 @@ meetings-editor/
 | GET | `/people?q=...` | Search — word-by-word partial match via pg_trgm; up to 100 results |
 | GET | `/people/{id}` | Get a single person by ID |
 | POST | `/people` | Create person. Returns 409 if name already exists |
-| PATCH | `/people/{id}` | Partially update person. Returns 409 on name conflict |
+| PATCH | `/people/{id}` | Update person — last_name and first_name required. Returns 409 on name conflict |
 | DELETE | `/people/{id}` | Delete person. Returns 409 if referenced in any meeting |
 
 ### Meetings
@@ -111,38 +116,52 @@ meetings-editor/
 | GET | `/meetings/{id}/meta` | Scalar fields only: id, title, date, status, chairperson, created_at |
 | GET | `/meetings/{id}/people` | Ordered people list |
 | GET | `/meetings/{id}/agenda-items` | Ordered agenda items with resolved speakers |
-| PATCH | `/meetings/{id}` | Partially update title and/or date |
+| PATCH | `/meetings/{id}` | Update meeting — title and date both required |
 | DELETE | `/meetings/{id}` | Delete meeting (cascades) |
-| PUT | `/meetings/{id}/chairperson` | Set or replace chairperson (must be in people list) |
-| POST | `/meetings/{id}/people` | Add person. 409 if already in meeting, 422 if ID not found |
+| PUT | `/meetings/{id}/chairperson` | Set or replace chairperson (must be in people list, 422 otherwise) |
+| POST | `/meetings/{id}/people` | Add person. 409 if already in meeting, 422 if person ID not found |
 | DELETE | `/meetings/{id}/people/{pid}` | Remove person. 409 if chairperson or speaker |
-| PUT | `/meetings/{id}/people/order` | Reorder. Body: `{ person_ids: [...] }` — exact set |
-| POST | `/meetings/{id}/agenda-items` | Add agenda item. Body: `{ text, speaker_ids: [...] }` |
-| PUT | `/meetings/{id}/agenda-items/{item_id}` | Replace text and full speaker list |
-| DELETE | `/meetings/{id}/agenda-items/{item_id}` | Delete agenda item |
-| PUT | `/meetings/{id}/agenda-items/order` | Reorder. Body: `{ agenda_item_ids: [...] }` |
-| POST | `/meetings/{id}/agenda-items/{item_id}/speakers` | Add speaker |
-| DELETE | `/meetings/{id}/agenda-items/{item_id}/speakers/{pid}` | Remove speaker (409 if last) |
-| PUT | `/meetings/{id}/agenda-items/{item_id}/speakers/order` | Reorder speakers |
-| GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx (409 if incomplete) |
-| GET | `/meetings/{id}/export/participants` | Download Список участников as .docx (409 if incomplete) |
+| PUT | `/meetings/{id}/people/order` | Reorder. Body: `{ person_ids: [...] }` — exact set, 422 if mismatch |
+| POST | `/meetings/{id}/agenda-items` | Add agenda item. Body: `{ text, speaker_ids: [...] }`. 422 if speaker not in meeting |
+| PUT | `/meetings/{id}/agenda-items/{item_id}` | Replace text and full speaker list. 422 if speaker not in meeting |
+| DELETE | `/meetings/{id}/agenda-items/{item_id}` | Delete agenda item. Returns updated meeting |
+| PUT | `/meetings/{id}/agenda-items/order` | Reorder. Body: `{ agenda_item_ids: [...] }` — exact set, 422 if mismatch |
+| POST | `/meetings/{id}/agenda-items/{item_id}/speakers` | Add speaker. 409 if already speaker, 422 if not in meeting |
+| DELETE | `/meetings/{id}/agenda-items/{item_id}/speakers/{pid}` | Remove speaker. 409 if last speaker |
+| PUT | `/meetings/{id}/agenda-items/{item_id}/speakers/order` | Reorder speakers — exact set, 422 if mismatch |
+| GET | `/meetings/{id}/export/agenda` | Download Повестка as .docx. 409 if incomplete |
+| GET | `/meetings/{id}/export/participants` | Download Список участников as .docx. 409 if incomplete |
 
-Mutation endpoints return the updated full `Meeting` object (reorder endpoints return 204).
+Mutation endpoints return the updated full `Meeting` object. Reorder endpoints return 204 No Content.
 
 Full spec: `openapi.yaml` at repo root.
 
 ---
 
-## MCP Server
+## Console Client
 
-Wraps all REST endpoints (except `DELETE /people/{id}` and `DELETE /meetings/{id}`) as 24 MCP tools.
+An interactive REPL (Go, stdlib only) for programmatic access. Reads one command per line from stdin, calls the backend REST API, prints JSON to stdout, and loops.
 
-- Transport: HTTP (JSON-RPC 2.0 POST)
-- Endpoint: `POST /mcp`
-- Port: 3000 (configurable via `MCP_ADDR`)
-- Backend URL: configurable via `BACKEND_URL`
+Every REST endpoint (except `DELETE /people/{id}` and `DELETE /meetings/{id}`) has a corresponding console command. The full command reference is in `skills/meetings-console/SKILL.md`.
 
-See `decisions/mcp-layer.md` for full tool list and design decisions.
+**Run against the stack:**
+```bash
+docker compose run --rm console
+```
+
+**Run locally:**
+```bash
+cd console
+BACKEND_URL=http://localhost:8080 go run .
+```
+
+---
+
+## AI Agent Integration
+
+OpenClaw (also known as Clawd/Moltbot) can drive the system via the console client using the skill defined in `skills/meetings-console/SKILL.md`. The skill file documents the complete command format, argument types, return values, and error codes.
+
+OpenClaw does not have native MCP support. The MCP server in `mcp/` is kept in the repository for reference but is not the primary programmatic interface.
 
 ---
 
@@ -167,7 +186,7 @@ Documents generated in-memory as raw OOXML. Formatting:
 ### Docker Compose (recommended)
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 ### Individual services
@@ -180,6 +199,6 @@ DATABASE_URL="postgres://meetings:meetings@localhost:5432/meetings_editor?sslmod
 # Frontend
 cd frontend && npm install && npm run dev
 
-# MCP server
-cd mcp && BACKEND_URL=http://localhost:8080 go run ./cmd/main
+# Console (requires backend running)
+cd console && BACKEND_URL=http://localhost:8080 go run .
 ```

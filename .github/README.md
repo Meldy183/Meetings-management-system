@@ -1,28 +1,28 @@
 # Meetings Editor
 
-A web app for a secretary to record official meetings and export them as `.docx` documents matching a fixed government-style template. Includes a full MCP server so AI agents can drive the entire workflow programmatically.
+A web app for a secretary to record official meetings and export them as `.docx` documents matching a fixed government-style template. Includes an interactive console client so AI agents (OpenClaw/Clawd) and developers can drive the entire workflow programmatically.
 
 ---
 
 ## Architecture
 
 ```
-AI agent (any MCP client)
-        │  MCP / HTTP  :3000
+OpenClaw agent / developer
+        │  stdin/stdout
         ▼
-  MCP Server (Go)         ← wraps the REST API as 24 MCP tools
+  Console client (Go)      ← interactive REPL, calls REST API
         │  REST / JSON  :8080
         ▼
-  Go HTTP Backend         ← all business logic lives here
+  Go HTTP Backend          ← all business logic lives here
         │
-        ├──► PostgreSQL   ← pg_trgm GIN index for people search
+        ├──► PostgreSQL    ← pg_trgm GIN index for people search
         │
-        └──► .docx        ← generated in-memory as raw OOXML
+        └──► .docx         ← generated in-memory as raw OOXML
 
-  React Frontend          ← pure display layer, no logic  :8081
+  React Frontend           ← pure display layer, no logic  :8081
 ```
 
-**Design rule:** all logic lives in the backend. The frontend and MCP server are pure clients of the REST API. Every UI action has a corresponding API endpoint, and every API endpoint has a corresponding MCP tool.
+**Design rule:** all logic lives in the backend. The frontend and console client are pure clients of the REST API. Every UI action has a corresponding API endpoint, and every API endpoint has a corresponding console command.
 
 ---
 
@@ -34,7 +34,8 @@ AI agent (any MCP client)
 | Database | PostgreSQL 16, pg_trgm extension |
 | Document generation | Raw OOXML — in-memory, no external library |
 | Frontend | React 18 + TypeScript, Vite, TanStack Query v5, Tailwind CSS |
-| MCP server | Go 1.22+, metoro-io/mcp-golang v0.16, HTTP transport |
+| Console client | Go 1.22+, stdlib only |
+| AI agent skills | OpenClaw / ClawHub (`skills/meetings-console/SKILL.md`) |
 | API contract | OpenAPI 3.0.3 (`openapi.yaml` at repo root) |
 | Deployment | Docker Compose |
 
@@ -45,13 +46,13 @@ AI agent (any MCP client)
 ### Option A — Docker Compose (recommended)
 
 ```bash
-docker compose up --build
+docker compose up --build -d
 ```
 
 | Service | URL |
 |---|---|
 | Frontend | http://localhost:8081 |
-| MCP server | http://localhost:3000/mcp |
+| Backend (internal) | http://localhost:8080 (not exposed to host) |
 
 > **DNS note:** if the build hangs pulling images, add `{"dns": ["8.8.8.8"]}` to `/etc/docker/daemon.json` and restart Docker.
 
@@ -70,11 +71,6 @@ go run ./cmd/api
 cd frontend && npm install && npm run dev
 ```
 
-**MCP server** (requires backend running):
-```bash
-cd mcp && BACKEND_URL=http://localhost:8080 go run ./cmd/main
-```
-
 ### Environment Variables
 
 **Backend:**
@@ -85,12 +81,49 @@ cd mcp && BACKEND_URL=http://localhost:8080 go run ./cmd/main
 | `PORT` | HTTP listen address (default `8080`) |
 | `ENV` | `dev` for human-readable logs, `prod` for JSON |
 
-**MCP server:**
+---
+
+## Console Client
+
+An interactive REPL for driving the system programmatically — from a terminal or an AI agent. Reads one command per line, calls the backend, prints JSON, and loops.
+
+### Run (against running stack)
+
+```bash
+docker compose run --rm console
+```
+
+The console container connects to the backend over the internal Docker network. The `--rm` flag removes the container on exit.
+
+### Run locally
+
+```bash
+cd console
+BACKEND_URL=http://localhost:8080 go run .
+```
+
+### Example session
+
+```
+> list-people smith
+> create-person Smith John "Alexei" "Head of Finance"
+> create-meeting "Board Meeting" 2026-03-22
+> add-person <uuid> 5
+> set-chairperson <uuid> 5
+> add-agenda-item <uuid> "Budget review" 5
+> get-meeting-meta <uuid>
+> export-agenda <uuid> agenda.docx
+> help
+> quit
+```
+
+Full command reference: `skills/meetings-console/SKILL.md`
+
+### Console environment variables
 
 | Variable | Description |
 |---|---|
 | `BACKEND_URL` | Backend base URL (default `http://localhost:8080`) |
-| `MCP_ADDR` | Listen address (default `:3000`) |
 
 ---
 
@@ -104,7 +137,7 @@ cd mcp && BACKEND_URL=http://localhost:8080 go run ./cmd/main
 | `GET` | `/people?q=...` | Search — word-by-word partial match via pg_trgm |
 | `GET` | `/people/{id}` | Get a single person by ID |
 | `POST` | `/people` | Create a person (409 if name already exists) |
-| `PATCH` | `/people/{id}` | Partially update a person |
+| `PATCH` | `/people/{id}` | Update person — last_name and first_name required |
 | `DELETE` | `/people/{id}` | Delete a person (409 if referenced in any meeting) |
 
 ### Meetings
@@ -117,7 +150,7 @@ cd mcp && BACKEND_URL=http://localhost:8080 go run ./cmd/main
 | `GET` | `/meetings/{id}/meta` | Scalar fields only: id, title, date, status, chairperson, created_at |
 | `GET` | `/meetings/{id}/people` | Ordered people list |
 | `GET` | `/meetings/{id}/agenda-items` | Ordered agenda items with resolved speakers |
-| `PATCH` | `/meetings/{id}` | Update title and/or date |
+| `PATCH` | `/meetings/{id}` | Update title and date — both fields required |
 | `DELETE` | `/meetings/{id}` | Delete meeting (cascades) |
 | `PUT` | `/meetings/{id}/chairperson` | Set or replace chairperson (must be in people list) |
 | `POST` | `/meetings/{id}/people` | Add a person |
@@ -160,27 +193,6 @@ Export is blocked (409) when status is `incomplete`.
 
 ---
 
-## MCP Server
-
-Exposes 24 tools at `POST http://localhost:3000/mcp` (JSON-RPC 2.0). Any MCP-compatible agent can connect directly.
-
-**Quick test:**
-```bash
-# List all tools
-curl -s -X POST http://localhost:3000/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | jq .
-
-# Call a tool
-curl -s -X POST http://localhost:3000/mcp \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"list_people","arguments":{"query":""}}}' | jq .
-```
-
-All tools mirror the REST API 1-to-1, except `delete_person` and `delete_meeting` which are not exposed via MCP.
-
----
-
 ## Document Export
 
 Generated in-memory as raw OOXML — no template files or external libraries.
@@ -214,10 +226,16 @@ Format: Times New Roman 14pt, A4, matches official government template.
 │       ├── api/                 typed fetch wrappers + types
 │       ├── components/          shared UI components
 │       └── pages/               route-level pages
-├── mcp/
-│   ├── cmd/main/                entry point
-│   ├── client/                  HTTP client for the backend
-│   └── tools/                   24 MCP tool definitions
+├── console/                     interactive REPL client (Go, stdlib only)
+│   ├── main.go                  REPL loop + command dispatch
+│   ├── client.go                HTTP client
+│   ├── people.go                people types + API methods
+│   ├── meetings.go              meeting types + API methods
+│   └── Dockerfile
+├── mcp/                         MCP server (kept for reference, not primary interface)
+├── skills/
+│   └── meetings-console/
+│       └── SKILL.md             OpenClaw agent skill — full command reference
 ├── decisions/                   architecture decisions and plans
 ├── openapi.yaml                 REST API source of truth
 └── docker-compose.yml
