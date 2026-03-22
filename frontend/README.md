@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React SPA for the Meetings Management System. Pure display layer — no business logic.
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- React 18 + TypeScript, Vite
+- TanStack Query v5 (server state)
+- React Router v6
+- Tailwind CSS v3
 
-## React Compiler
+## Routes
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| Path | Page |
+|---|---|
+| `/` | Meeting list with pagination |
+| `/meetings/new` | 5-step meeting creation wizard |
+| `/meetings/:id` | Meeting detail — inline editing, drag-and-drop reorder, export |
+| `/people` | People directory — search, add, edit |
 
-## Expanding the ESLint configuration
+## Running Locally
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Requires the backend running at `http://localhost:8080`. The Vite dev proxy forwards `/api` → backend automatically.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+├── api/
+│   ├── types.ts         TypeScript interfaces mirroring OpenAPI schemas
+│   ├── client.ts        Base fetch wrapper
+│   ├── people.ts        People API calls
+│   └── meetings.ts      Meetings API calls
+├── components/
+│   ├── ParticipantSearch.tsx   Debounced search + add-to-db inline form
+│   ├── ParticipantForm.tsx     Create/edit person fields
+│   ├── ParticipantCard.tsx     Person row with edit/remove
+│   └── StepIndicator.tsx      Step bar for the creation wizard
+└── pages/
+    ├── MeetingListPage.tsx
+    ├── CreateMeetingPage.tsx
+    ├── MeetingDetailPage.tsx
+    └── ParticipantsPage.tsx
 ```
