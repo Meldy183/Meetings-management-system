@@ -35,6 +35,19 @@ const (
 		ORDER BY m.date DESC
 		LIMIT $1 OFFSET $2`
 
+	queryListMeetingPeople = `
+		SELECT mp.meeting_id, p.id, p.last_name, p.first_name, p.middle_name, p.info
+		FROM meeting_participants mp
+		JOIN participants p ON p.id = mp.person_id
+		WHERE mp.meeting_id = ANY($1)
+		ORDER BY mp.meeting_id, mp.position`
+
+	queryListMeetingAgendaItems = `
+		SELECT meeting_id, id
+		FROM agenda_items
+		WHERE meeting_id = ANY($1)
+		ORDER BY meeting_id, position`
+
 	queryGetMeeting = `
 		SELECT m.id, m.title, m.date, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
@@ -159,6 +172,8 @@ func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.M
 	defer rows.Close()
 
 	var meetings []meeting.Meeting
+	var meetingIDs []string
+	idxByID := make(map[string]int)
 	for rows.Next() {
 		var m meeting.Meeting
 		var cID *int
@@ -171,9 +186,53 @@ func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.M
 			return nil, 0, err
 		}
 		m.Chairperson = scanChairperson(cID, cLast, cFirst, cMiddle, cInfo)
+		idxByID[m.ID] = len(meetings)
 		meetings = append(meetings, m)
+		meetingIDs = append(meetingIDs, m.ID)
 	}
 	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	if len(meetingIDs) == 0 {
+		return meetings, total, nil
+	}
+
+	// Batch-load people so Status() is accurate.
+	pRows, err := r.db.Query(ctx, queryListMeetingPeople, meetingIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer pRows.Close()
+	for pRows.Next() {
+		var mid string
+		var p person.Person
+		if err := pRows.Scan(&mid, &p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
+			return nil, 0, err
+		}
+		i := idxByID[mid]
+		meetings[i].People = append(meetings[i].People, p)
+	}
+	if err := pRows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	// Batch-load agenda items so Status() is accurate.
+	aRows, err := r.db.Query(ctx, queryListMeetingAgendaItems, meetingIDs)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer aRows.Close()
+	for aRows.Next() {
+		var mid string
+		var item meeting.AgendaItem
+		if err := aRows.Scan(&mid, &item.ID); err != nil {
+			return nil, 0, err
+		}
+		i := idxByID[mid]
+		meetings[i].AgendaItems = append(meetings[i].AgendaItems, item)
+	}
+	if err := aRows.Err(); err != nil {
 		return nil, 0, err
 	}
 
