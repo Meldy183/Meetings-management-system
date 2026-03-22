@@ -78,7 +78,20 @@ services:
       PORT: 8080
       ENV: prod
 
-  # 4. React frontend (nginx)
+  # 4. MCP server — exposes all API endpoints as MCP tools for AI agents
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:8080
+      MCP_ADDR: ":3000"
+    ports:
+      - "3000:3000"
+
+  # 5. React frontend (nginx)
   frontend:
     build:
       context: ./frontend
