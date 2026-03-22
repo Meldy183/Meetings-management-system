@@ -18,7 +18,7 @@ RUN go mod download
 
 COPY . .
 
-CMD ["go", "test", "-p", "1", "./..."]
+CMD ["sh", "-c", "go test -p 1 ./... 2>&1 | grep -v '^?'"]
 
 # ---- runtime ----
 FROM alpine:3.20

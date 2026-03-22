@@ -185,6 +185,31 @@ func TestPersonCreate_Conflict(t *testing.T) {
 
 // PATCH /people/{id}
 
+func TestPersonUpdate_InvalidID(t *testing.T) {
+	_, h := newPersonHandler(t)
+
+	r := httptest.NewRequest("PATCH", "/people/notanumber", nil)
+	r.SetPathValue("id", "notanumber")
+	w := httptest.NewRecorder()
+	h.Update(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
+func TestPersonUpdate_MissingFields(t *testing.T) {
+	_, h := newPersonHandler(t)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /people/{id}", h.Update)
+	w := doRequest(mux, "PATCH", "/people/5", map[string]string{"last_name": "ТолькоФамилия"})
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
 func TestPersonUpdate_OK(t *testing.T) {
 	svc, h := newPersonHandler(t)
 
@@ -235,6 +260,19 @@ func TestPersonUpdate_Conflict(t *testing.T) {
 }
 
 // DELETE /people/{id}
+
+func TestPersonDelete_InvalidID(t *testing.T) {
+	_, h := newPersonHandler(t)
+
+	r := httptest.NewRequest("DELETE", "/people/notanumber", nil)
+	r.SetPathValue("id", "notanumber")
+	w := httptest.NewRecorder()
+	h.Delete(w, r)
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
 
 func TestPersonDelete_OK(t *testing.T) {
 	svc, h := newPersonHandler(t)

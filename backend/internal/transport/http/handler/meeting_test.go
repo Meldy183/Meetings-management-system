@@ -555,6 +555,40 @@ func TestRemoveAgendaItemSpeaker_LastSpeaker(t *testing.T) {
 	}
 }
 
+// --- MeetingCreate missing date ---
+
+func TestMeetingCreate_MissingDate(t *testing.T) {
+	_, export, h := newMeetingHandler(t)
+	_ = export
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /meetings", h.Create)
+	w := doRequest(mux, "POST", "/meetings", map[string]any{
+		"title": "No Date",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
+// --- MeetingUpdate validation ---
+
+func TestMeetingUpdate_MissingFields(t *testing.T) {
+	_, export, h := newMeetingHandler(t)
+	_ = export
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /meetings/{id}", h.Update)
+	w := doRequest(mux, "PATCH", "/meetings/"+testID, map[string]any{
+		"title": "",
+	})
+
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("want 400, got %d", w.Code)
+	}
+}
+
 // --- ReorderPeople ---
 
 func TestReorderPeople_OK(t *testing.T) {
@@ -584,6 +618,80 @@ func TestReorderPeople_SetMismatch(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("PUT /meetings/{id}/people/order", h.ReorderPeople)
 	w := doRequest(mux, "PUT", "/meetings/"+testID+"/people/order", map[string]any{
+		"person_ids": []int{99},
+	})
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422, got %d", w.Code)
+	}
+}
+
+// --- ReorderAgendaItems ---
+
+func TestReorderAgendaItems_OK(t *testing.T) {
+	svc, export, h := newMeetingHandler(t)
+	_ = export
+
+	svc.EXPECT().ReorderAgendaItems(gomock.Any(), testID, []int{2, 1}).Return(nil)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/order", h.ReorderAgendaItems)
+	w := doRequest(mux, "PUT", "/meetings/"+testID+"/agenda-items/order", map[string]any{
+		"agenda_item_ids": []int{2, 1},
+	})
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReorderAgendaItems_SetMismatch(t *testing.T) {
+	svc, export, h := newMeetingHandler(t)
+	_ = export
+
+	svc.EXPECT().ReorderAgendaItems(gomock.Any(), testID, gomock.Any()).
+		Return(&svcMeeting.ErrAgendaItemSetMismatch{})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/order", h.ReorderAgendaItems)
+	w := doRequest(mux, "PUT", "/meetings/"+testID+"/agenda-items/order", map[string]any{
+		"agenda_item_ids": []int{99},
+	})
+
+	if w.Code != http.StatusUnprocessableEntity {
+		t.Errorf("want 422, got %d", w.Code)
+	}
+}
+
+// --- ReorderAgendaItemSpeakers ---
+
+func TestReorderAgendaItemSpeakers_OK(t *testing.T) {
+	svc, export, h := newMeetingHandler(t)
+	_ = export
+
+	svc.EXPECT().ReorderAgendaItemSpeakers(gomock.Any(), testID, 1, []int{2, 1}).Return(nil)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}/speakers/order", h.ReorderAgendaItemSpeakers)
+	w := doRequest(mux, "PUT", "/meetings/"+testID+"/agenda-items/1/speakers/order", map[string]any{
+		"person_ids": []int{2, 1},
+	})
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReorderAgendaItemSpeakers_SetMismatch(t *testing.T) {
+	svc, export, h := newMeetingHandler(t)
+	_ = export
+
+	svc.EXPECT().ReorderAgendaItemSpeakers(gomock.Any(), testID, 1, gomock.Any()).
+		Return(&svcMeeting.ErrAgendaItemSetMismatch{})
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}/speakers/order", h.ReorderAgendaItemSpeakers)
+	w := doRequest(mux, "PUT", "/meetings/"+testID+"/agenda-items/1/speakers/order", map[string]any{
 		"person_ids": []int{99},
 	})
 
@@ -648,6 +756,26 @@ func TestExportParticipants_IncompleteBlocked(t *testing.T) {
 
 	if w.Code != http.StatusConflict {
 		t.Errorf("want 409, got %d", w.Code)
+	}
+}
+
+func TestExportParticipants_OK(t *testing.T) {
+	svc, export, h := newMeetingHandler(t)
+
+	m := completeMeetingDomain()
+	svc.EXPECT().GetByID(gomock.Any(), testID).Return(m, nil)
+	export.EXPECT().Participants(m).Return([]byte("fakezip"), nil)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /meetings/{id}/export/participants", h.ExportParticipants)
+	w := doRequest(mux, "GET", "/meetings/"+testID+"/export/participants", nil)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.wordprocessingml.document" {
+		t.Errorf("unexpected Content-Type: %s", ct)
 	}
 }
 
