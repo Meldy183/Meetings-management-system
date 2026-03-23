@@ -38,6 +38,7 @@ export function SpeakerPicker({
     <div className="space-y-2">
       {selected.length > 0 && (
         <div className="space-y-1">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Докладчики ({selected.length})</p>
           {selected.map((p, i) => (
             <div
               key={p.id}
@@ -65,6 +66,8 @@ export function SpeakerPicker({
         </div>
       )}
       {available.length > 0 && (
+        <div>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Добавить</p>
         <div className="border rounded-lg divide-y max-h-40 overflow-y-auto">
           {available.map(p => (
             <div
@@ -76,6 +79,7 @@ export function SpeakerPicker({
               {p.info && <span className="text-xs text-gray-400 ml-2 truncate max-w-[40%]">{p.info}</span>}
             </div>
           ))}
+        </div>
         </div>
       )}
       {people.length === 0 && (
