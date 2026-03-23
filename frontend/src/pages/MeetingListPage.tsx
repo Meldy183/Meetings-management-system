@@ -22,7 +22,7 @@ export function MeetingListPage() {
         <h1 className="text-xl font-semibold text-gray-900">Совещания</h1>
         <Link
           to="/meetings/new"
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
+          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700"
         >
           + Создать
         </Link>
@@ -38,7 +38,7 @@ export function MeetingListPage() {
               <Link
                 key={meeting.id}
                 to={`/meetings/${meeting.id}`}
-                className="block p-4 bg-white border rounded-lg hover:border-blue-400 transition-colors"
+                className="block p-4 bg-white border rounded-lg hover:border-green-400 transition-colors"
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-sm text-gray-900 leading-snug">{meeting.title}</p>
@@ -67,7 +67,7 @@ export function MeetingListPage() {
             {offset > 0 && (
               <button
                 onClick={() => setOffset(o => Math.max(0, o - limit))}
-                className="text-sm text-blue-600 hover:underline"
+                className="text-sm text-green-600 hover:underline"
               >
                 ← Назад
               </button>
@@ -75,7 +75,7 @@ export function MeetingListPage() {
             {offset + limit < data.total && (
               <button
                 onClick={() => setOffset(o => o + limit)}
-                className="text-sm text-blue-600 hover:underline ml-auto"
+                className="text-sm text-green-600 hover:underline ml-auto"
               >
                 Далее →
               </button>

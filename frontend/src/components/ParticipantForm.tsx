@@ -19,7 +19,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
           <label className="block text-xs font-medium text-gray-700 mb-1">Фамилия *</label>
           <input
             {...register('last_name', { required: 'Обязательное поле' })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Иванов"
           />
           {errors.last_name && <p className="text-xs text-red-500 mt-1">{errors.last_name.message}</p>}
@@ -28,7 +28,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
           <label className="block text-xs font-medium text-gray-700 mb-1">Имя *</label>
           <input
             {...register('first_name', { required: 'Обязательное поле' })}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Иван"
           />
           {errors.first_name && <p className="text-xs text-red-500 mt-1">{errors.first_name.message}</p>}
@@ -37,7 +37,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
           <label className="block text-xs font-medium text-gray-700 mb-1">Отчество</label>
           <input
             {...register('middle_name')}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="Иванович"
           />
         </div>
@@ -46,7 +46,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
         <label className="block text-xs font-medium text-gray-700 mb-1">Должность / роль</label>
         <input
           {...register('info')}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           placeholder="Руководитель отдела, Центр НТР"
         />
       </div>
@@ -54,7 +54,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
         <button
           type="submit"
           disabled={isLoading}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          className="bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
         >
           {isLoading ? 'Сохранение...' : submitLabel}
         </button>

@@ -48,7 +48,7 @@ export function SpeakerPicker({
               onDragEnd={handleDragEnd}
               className={[
                 'flex items-center gap-2 px-2 py-1.5 bg-white border rounded-lg text-sm transition-opacity',
-                dragOverIndex === i && dragIndex.current !== i ? 'border-blue-400 bg-blue-50' : '',
+                dragOverIndex === i && dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
                 dragIndex.current === i ? 'opacity-40' : '',
               ].join(' ')}
             >

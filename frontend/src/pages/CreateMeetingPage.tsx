@@ -83,6 +83,7 @@ export function CreateMeetingPage() {
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null)
   const [titleInput, setTitleInput] = useState('Совещание по вопросам ')
   const [dateInput, setDateInput] = useState('')
+  const [timeInput, setTimeInput] = useState('10:00')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -129,7 +130,7 @@ export function CreateMeetingPage() {
     return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
   }
 
-  const canProceedStep1 = titleInput.trim() && dateInput
+  const canProceedStep1 = titleInput.trim() && dateInput && timeInput
   const canProceedStep2 = state.people.length > 0
   const canProceedStep3 = state.chairperson_id !== null
   const canProceedStep4 = state.agenda_items.length > 0 &&
@@ -153,25 +154,36 @@ export function CreateMeetingPage() {
               value={titleInput}
               onChange={e => setTitleInput(e.target.value)}
               rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Дата и время *</label>
-            <input
-              type="datetime-local"
-              value={dateInput}
-              onChange={e => setDateInput(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Дата *</label>
+              <input
+                type="date"
+                value={dateInput}
+                onChange={e => setDateInput(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Время *</label>
+              <input
+                type="time"
+                value={timeInput}
+                onChange={e => setTimeInput(e.target.value)}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+              />
+            </div>
           </div>
           <button
             disabled={!canProceedStep1}
             onClick={() => {
-              dispatch({ type: 'SET_TITLE_DATE', title: titleInput.trim(), date: dateInput })
+              dispatch({ type: 'SET_TITLE_DATE', title: titleInput.trim(), date: `${dateInput}T${timeInput}` })
               goNext()
             }}
-            className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50"
+            className="w-full bg-green-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50"
           >
             Далее →
           </button>
@@ -181,6 +193,7 @@ export function CreateMeetingPage() {
       {/* Step 2: People */}
       {step === 2 && (
         <div className="space-y-4">
+          <p className="text-sm text-gray-500">Найдите участников по имени или добавьте нового в базу данных.</p>
           <ParticipantSearch
             onAdd={p => dispatch({ type: 'ADD_PERSON', person: p })}
             existingIds={state.people.map(p => p.id)}
@@ -223,7 +236,7 @@ export function CreateMeetingPage() {
             <button
               disabled={!canProceedStep2}
               onClick={goNext}
-              className="flex-1 bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 bg-green-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               Готово ({state.people.length}) →
             </button>
@@ -261,7 +274,7 @@ export function CreateMeetingPage() {
             <button
               disabled={!canProceedStep3}
               onClick={goNext}
-              className="flex-1 bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 bg-green-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               Далее →
             </button>
@@ -281,7 +294,7 @@ export function CreateMeetingPage() {
                     value={item.text}
                     onChange={e => dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, text: e.target.value } })}
                     placeholder="Тема пункта повестки"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-1">Докладчики *</p>
@@ -300,9 +313,12 @@ export function CreateMeetingPage() {
             ))}
           </div>
 
+          {state.agenda_items.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-1">Добавьте хотя бы один пункт повестки</p>
+          )}
           <button
             onClick={() => dispatch({ type: 'ADD_AGENDA_ITEM' })}
-            className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+            className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-500 hover:border-green-400 hover:text-green-500"
           >
             + Добавить пункт повестки
           </button>
@@ -314,7 +330,7 @@ export function CreateMeetingPage() {
             <button
               disabled={!canProceedStep4}
               onClick={goNext}
-              className="flex-1 bg-blue-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 bg-green-600 text-white py-3 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               Далее ({state.agenda_items.length}) →
             </button>
@@ -325,30 +341,30 @@ export function CreateMeetingPage() {
       {/* Step 5: Review + Submit */}
       {step === 5 && (
         <div className="space-y-4">
-          <div className="bg-white border rounded-lg p-4 space-y-3">
-            <div>
+          <div className="bg-white border rounded-lg p-4 divide-y divide-gray-100">
+            <div className="pb-3">
               <p className="text-xs text-gray-500">Тема</p>
               <p className="text-sm font-medium mt-0.5">{state.title}</p>
             </div>
-            <div>
+            <div className="py-3">
               <p className="text-xs text-gray-500">Дата и время</p>
               <p className="text-sm font-medium mt-0.5">
                 {new Date(state.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
-            <div>
+            <div className="py-3">
               <p className="text-xs text-gray-500">Председательствующий</p>
               <p className="text-sm font-medium mt-0.5">
                 {fullName(state.people.find(p => p.id === state.chairperson_id)!)}
               </p>
             </div>
-            <div>
+            <div className="py-3">
               <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
               {state.people.map(p => (
                 <p key={p.id} className="text-sm mt-0.5">{fullName(p)}</p>
               ))}
             </div>
-            <div>
+            <div className="pt-3">
               <p className="text-xs text-gray-500">Повестка ({state.agenda_items.length} пунктов)</p>
               {state.agenda_items.map((item, i) => {
                 const speakers = item.speaker_ids

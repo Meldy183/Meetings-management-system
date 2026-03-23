@@ -59,7 +59,7 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
         value={query}
         onChange={e => { setQuery(e.target.value); setShowCreateForm(false); setCreateError(null) }}
         placeholder="Поиск по имени..."
-        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
       />
 
       {/* Results */}
@@ -80,7 +80,7 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
                 ) : (
                   <button
                     onClick={() => { onAdd(p); setQuery('') }}
-                    className="shrink-0 ml-3 bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-700"
+                    className="shrink-0 ml-3 bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-green-700"
                   >
                     Добавить
                   </button>
@@ -97,7 +97,7 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
           <p className="text-sm text-yellow-800">Никого не найдено.</p>
           <button
             onClick={() => setShowCreateForm(true)}
-            className="mt-1 text-sm text-blue-600 hover:underline"
+            className="mt-1 text-sm text-green-600 hover:underline"
           >
             Добавить в базу данных
           </button>
@@ -122,7 +122,7 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
       {!hasQuery && !showCreateForm && (
         <button
           onClick={() => setShowCreateForm(true)}
-          className="text-sm text-blue-600 hover:underline"
+          className="text-sm text-green-600 hover:underline"
         >
           + Новый участник
         </button>

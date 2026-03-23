@@ -266,7 +266,7 @@ export function MeetingDetailPage() {
               setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date) })
               setEditingMeeting(true)
             }}
-            className="text-xs text-gray-500 hover:text-blue-600 border rounded px-2 py-1"
+            className="text-xs text-gray-500 hover:text-green-600 border rounded px-2 py-1"
           >
             Изменить
           </button>
@@ -289,7 +289,7 @@ export function MeetingDetailPage() {
               value={meetingForm.title}
               onChange={e => setMeetingForm(f => ({ ...f, title: e.target.value }))}
               rows={2}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
             />
           </div>
           <div>
@@ -298,7 +298,7 @@ export function MeetingDetailPage() {
               type="datetime-local"
               value={meetingForm.date}
               onChange={e => setMeetingForm(f => ({ ...f, date: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
           {updateMeetingMutation.isError && (
@@ -321,7 +321,7 @@ export function MeetingDetailPage() {
                 title: meetingForm.title,
                 date: new Date(meetingForm.date).toISOString(),
               })}
-              className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+              className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
               {updateMeetingMutation.isPending ? 'Сохранение...' : 'Сохранить'}
             </button>
@@ -346,7 +346,7 @@ export function MeetingDetailPage() {
                 setChairpersonId(meeting.chairperson?.id ?? 0)
                 setEditingChairperson(true)
               }}
-              className="text-xs text-gray-500 hover:text-blue-600 border rounded px-2 py-1"
+              className="text-xs text-gray-500 hover:text-green-600 border rounded px-2 py-1"
             >
               {meeting.chairperson ? 'Изменить' : 'Назначить'}
             </button>
@@ -357,7 +357,7 @@ export function MeetingDetailPage() {
             <select
               value={chairpersonId}
               onChange={e => setChairpersonId(Number(e.target.value))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
             >
               <option value={0}>Выберите председателя</option>
               {people.map(p => (
@@ -374,7 +374,7 @@ export function MeetingDetailPage() {
               <button
                 disabled={!chairpersonId || setChairpersonMutation.isPending}
                 onClick={() => setChairpersonMutation.mutate(chairpersonId)}
-                className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 bg-green-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
               >
                 {setChairpersonMutation.isPending ? 'Сохранение...' : 'Сохранить'}
               </button>
@@ -411,7 +411,7 @@ export function MeetingDetailPage() {
               onDragEnd={peopleDnd.handleDragEnd}
               className={[
                 'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity',
-                peopleDnd.dragOverIndex === i && peopleDnd.dragIndex.current !== i ? 'border-blue-400 bg-blue-50' : '',
+                peopleDnd.dragOverIndex === i && peopleDnd.dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
                 peopleDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
               ].join(' ')}
             >
@@ -441,7 +441,7 @@ export function MeetingDetailPage() {
             value={personQuery}
             onChange={e => { setPersonQuery(e.target.value); setPersonError(null) }}
             placeholder="Добавить участника..."
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
           />
           {debouncedPersonQuery && !isSearching && searchResults.length > 0 && (
             <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
@@ -459,7 +459,7 @@ export function MeetingDetailPage() {
                       <button
                         onClick={() => addPersonMutation.mutate(p.id)}
                         disabled={addPersonMutation.isPending}
-                        className="shrink-0 ml-3 bg-blue-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                        className="shrink-0 ml-3 bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
                       >
                         Добавить
                       </button>
@@ -491,7 +491,7 @@ export function MeetingDetailPage() {
                     value={itemForm.text}
                     onChange={e => setItemForm(f => ({ ...f, text: e.target.value }))}
                     placeholder="Тема пункта повестки"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                   <p className="text-xs text-gray-500 font-medium">Докладчики:</p>
                   <SpeakerPicker
@@ -509,7 +509,7 @@ export function MeetingDetailPage() {
                     <button
                       disabled={!itemForm.text || itemForm.speaker_ids.length === 0 || updateAgendaItemMutation.isPending}
                       onClick={() => updateAgendaItemMutation.mutate({ itemId: item.id, data: { text: itemForm.text, speaker_ids: itemForm.speaker_ids } })}
-                      className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                      className="flex-1 bg-green-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
                     >
                       Сохранить
                     </button>
@@ -524,7 +524,7 @@ export function MeetingDetailPage() {
                   onDragEnd={agendaDnd.handleDragEnd}
                   className={[
                     'bg-white border rounded-lg p-3 flex items-start gap-3 transition-opacity',
-                    agendaDnd.dragOverIndex === i && agendaDnd.dragIndex.current !== i ? 'border-blue-400 bg-blue-50' : '',
+                    agendaDnd.dragOverIndex === i && agendaDnd.dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
                     agendaDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
                   ].join(' ')}
                 >
@@ -565,7 +565,7 @@ export function MeetingDetailPage() {
                         setEditingItemId(item.id)
                         setItemForm({ text: item.text, speaker_ids: item.speakers.map(s => s.id) })
                       }}
-                      className="text-xs text-gray-400 hover:text-blue-600 px-1.5 py-1 rounded"
+                      className="text-xs text-gray-400 hover:text-green-600 px-1.5 py-1 rounded"
                     >
                       ✎
                     </button>
@@ -589,7 +589,7 @@ export function MeetingDetailPage() {
               value={newItem.text}
               onChange={e => setNewItem(f => ({ ...f, text: e.target.value }))}
               placeholder="Тема пункта повестки"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
             <p className="text-xs text-gray-500 font-medium">Докладчики:</p>
             <SpeakerPicker
@@ -607,7 +607,7 @@ export function MeetingDetailPage() {
               <button
                 disabled={!newItem.text || newItem.speaker_ids.length === 0 || addAgendaItemMutation.isPending}
                 onClick={() => addAgendaItemMutation.mutate({ text: newItem.text, speaker_ids: newItem.speaker_ids })}
-                className="flex-1 bg-blue-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50"
+                className="flex-1 bg-green-600 text-white py-1.5 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
               >
                 Добавить
               </button>

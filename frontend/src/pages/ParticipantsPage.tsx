@@ -71,7 +71,7 @@ export function ParticipantsPage() {
         value={query}
         onChange={e => setQuery(e.target.value)}
         placeholder="Поиск по имени..."
-        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
       />
 
       {isLoading && <p className="text-sm text-gray-400">Загрузка...</p>}
@@ -106,7 +106,7 @@ export function ParticipantsPage() {
                   <div className="flex gap-2 shrink-0 ml-3">
                     <button
                       onClick={() => setEditingId(p.id)}
-                      className="text-xs text-gray-500 hover:text-blue-600 px-2 py-1 rounded"
+                      className="text-xs text-gray-500 hover:text-green-600 px-2 py-1 rounded"
                     >
                       Изменить
                     </button>
@@ -127,7 +127,7 @@ export function ParticipantsPage() {
       {!showAddForm ? (
         <button
           onClick={() => setShowAddForm(true)}
-          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm text-gray-500 hover:border-green-400 hover:text-green-500"
         >
           + Добавить нового участника
         </button>
