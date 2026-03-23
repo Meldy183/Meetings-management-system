@@ -23,7 +23,8 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА "+m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА", 28)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	chairName := ""
 	if m.Chairperson != nil {
