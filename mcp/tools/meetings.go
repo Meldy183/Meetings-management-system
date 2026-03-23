@@ -36,10 +36,11 @@ func registerMeetingTools(server *mcp.Server, c *client.Client) error {
 	type CreateMeetingArgs struct {
 		Title string    `json:"title" jsonschema:"required,description=Meeting topic or title"`
 		Date  time.Time `json:"date" jsonschema:"required,description=Meeting date and time in RFC3339 format (e.g. 2026-03-22T10:00:00Z)"`
+		Place string    `json:"place" jsonschema:"description=Optional venue or location (e.g. г. Москва ул. Тверская д. 13)"`
 	}
-	if err := server.RegisterTool("create_meeting", "Create a new meeting with title and date. Returns the meeting with status 'incomplete' — add people, chairperson, and agenda items next.",
+	if err := server.RegisterTool("create_meeting", "Create a new meeting with title, date, and optional place. Returns the meeting with status 'incomplete' — add people, chairperson, and agenda items next.",
 		func(ctx context.Context, args CreateMeetingArgs) (*mcp.ToolResponse, error) {
-			m, err := c.CreateMeeting(ctx, args.Title, args.Date)
+			m, err := c.CreateMeeting(ctx, args.Title, args.Date, args.Place)
 			if err != nil {
 				return nil, err
 			}
@@ -104,10 +105,11 @@ func registerMeetingTools(server *mcp.Server, c *client.Client) error {
 		MeetingID string    `json:"meeting_id" jsonschema:"required,description=Meeting UUID"`
 		Title     string    `json:"title" jsonschema:"required,description=New meeting title"`
 		Date      time.Time `json:"date" jsonschema:"required,description=New meeting date and time in RFC3339 format"`
+		Place     string    `json:"place" jsonschema:"description=Optional venue or location; empty string clears the field"`
 	}
-	if err := server.RegisterTool("update_meeting", "Update meeting title and/or date",
+	if err := server.RegisterTool("update_meeting", "Update meeting title, date, and/or place",
 		func(ctx context.Context, args UpdateMeetingArgs) (*mcp.ToolResponse, error) {
-			m, err := c.UpdateMeeting(ctx, args.MeetingID, args.Title, args.Date)
+			m, err := c.UpdateMeeting(ctx, args.MeetingID, args.Title, args.Date, args.Place)
 			if err != nil {
 				return nil, err
 			}

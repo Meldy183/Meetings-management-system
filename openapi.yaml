@@ -368,9 +368,10 @@ paths:
     patch:
       tags:
         - meetings
-      summary: Update meeting title and date
+      summary: Update meeting title, date, and place
       description: >
-        Updates the title and date of an existing meeting. Both fields are required.
+        Updates the title, date, and optional place of an existing meeting.
+        Title and date are required; place is optional (send empty string to clear).
         To set or change the chairperson use PUT /meetings/{id}/chairperson.
         Returns the full updated Meeting object.
       parameters:
@@ -1235,6 +1236,10 @@ components:
           type: string
           format: date-time
           example: '2026-02-26T11:00:00Z'
+        place:
+          type: string
+          description: Optional venue or location of the meeting
+          example: г. Москва, ул. Тверская, д. 13
         chairperson:
           description: Resolved chairperson object (null if not yet set)
           nullable: true
@@ -1416,6 +1421,12 @@ components:
             Date and time of the meeting (UTC, ISO 8601).
             Rendered as a localised date/time string in document headers.
           example: '2026-02-26T11:00:00Z'
+        place:
+          type: string
+          description: >
+            Optional venue or location of the meeting.
+            Rendered right-aligned below the date in exported documents.
+          example: г. Москва, ул. Тверская, д. 13
 
     Meeting:
       type: object
@@ -1443,6 +1454,10 @@ components:
           format: date-time
           description: Date and time of the meeting (UTC, ISO 8601)
           example: '2026-02-26T11:00:00Z'
+        place:
+          type: string
+          description: Optional venue or location of the meeting
+          example: г. Москва, ул. Тверская, д. 13
         chairperson:
           description: Resolved chairperson object (null if not yet set)
           nullable: true
@@ -1518,7 +1533,7 @@ components:
 
     MeetingUpdate:
       type: object
-      description: Payload for updating an existing meeting's title and date. Both fields are required.
+      description: Payload for updating an existing meeting's title, date, and/or place. Title and date are required.
       required:
         - title
         - date
@@ -1532,6 +1547,10 @@ components:
           format: date-time
           description: New date and time of the meeting (UTC, ISO 8601)
           example: '2026-03-01T10:00:00Z'
+        place:
+          type: string
+          description: Optional venue or location; empty string clears the field
+          example: г. Москва, ул. Тверская, д. 13
 
     SetChairperson:
       type: object

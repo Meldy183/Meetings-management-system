@@ -107,7 +107,7 @@ BACKEND_URL=http://localhost:8080 go run .
 ```
 > list-people smith
 > create-person Smith John "Alexei" "Head of Finance"
-> create-meeting "Board Meeting" 2026-03-22
+> create-meeting "Board Meeting" 2026-03-22 "г. Москва, ул. Тверская, д. 13"
 > add-person <uuid> 5
 > set-chairperson <uuid> 5
 > add-agenda-item <uuid> "Budget review" 5
@@ -147,12 +147,12 @@ Full command reference: `skills/meetings-console/SKILL.md`
 | Method | Path | Description |
 |---|---|---|
 | `GET` | `/meetings` | Paginated list, newest first |
-| `POST` | `/meetings` | Create with title + date only — starts as `incomplete` |
+| `POST` | `/meetings` | Create with title + date (+ optional place) — starts as `incomplete` |
 | `GET` | `/meetings/{id}` | Full meeting details |
-| `GET` | `/meetings/{id}/meta` | Scalar fields only: id, title, date, status, chairperson, created_at |
+| `GET` | `/meetings/{id}/meta` | Scalar fields only: id, title, date, place, status, chairperson, created_at |
 | `GET` | `/meetings/{id}/people` | Ordered people list |
 | `GET` | `/meetings/{id}/agenda-items` | Ordered agenda items with resolved speakers |
-| `PATCH` | `/meetings/{id}` | Update title and date — both fields required |
+| `PATCH` | `/meetings/{id}` | Update title and date (+ optional place) — title and date required |
 | `DELETE` | `/meetings/{id}` | Delete meeting (cascades) |
 | `PUT` | `/meetings/{id}/chairperson` | Set or replace chairperson (must be in people list) |
 | `POST` | `/meetings/{id}/people` | Add a person |
