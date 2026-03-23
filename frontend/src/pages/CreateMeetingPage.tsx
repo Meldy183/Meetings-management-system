@@ -1,7 +1,7 @@
 import { useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createMeeting, addMeetingPerson, setChairperson, addAgendaItem } from '../api/meetings'
+import { createMeeting, addMeetingPerson, reorderPeople, setChairperson, addAgendaItem } from '../api/meetings'
 import { updatePerson, sortPeople } from '../api/people'
 import { ParticipantSearch } from '../components/ParticipantSearch'
 import { ParticipantCard } from '../components/ParticipantCard'
@@ -126,6 +126,7 @@ export function CreateMeetingPage() {
       for (const p of state.people) {
         await addMeetingPerson(meeting.id, p.id)
       }
+      await reorderPeople(meeting.id, state.people.map(p => p.id))
       if (state.chairperson_id !== null) {
         await setChairperson(meeting.id, state.chairperson_id)
       }
@@ -148,13 +149,8 @@ export function CreateMeetingPage() {
     return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
   }
 
-  async function handleAddPerson(p: Person) {
-    const newPeople = [...state.people.filter(ep => ep.id !== p.id), p]
+  function handleAddPerson(p: Person) {
     dispatch({ type: 'ADD_PERSON', person: p })
-    try {
-      const sortedIds = await sortPeople(newPeople.map(ep => ep.id))
-      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => newPeople.find(ep => ep.id === id)!) })
-    } catch { /* keep unsorted on error */ }
   }
 
   async function handleSort() {
