@@ -81,7 +81,7 @@ export function CreateMeetingPage() {
   const [step, setStep] = useState(1)
   const [state, dispatch] = useReducer(reducer, initialState)
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null)
-  const [titleInput, setTitleInput] = useState('')
+  const [titleInput, setTitleInput] = useState('Совещание по вопросам ')
   const [dateInput, setDateInput] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
@@ -148,12 +148,11 @@ export function CreateMeetingPage() {
       {step === 1 && (
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Тема совещания *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Тема *</label>
             <textarea
               value={titleInput}
               onChange={e => setTitleInput(e.target.value)}
               rows={3}
-              placeholder="совещания по вопросам..."
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
