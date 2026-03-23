@@ -309,8 +309,8 @@ export function CreateMeetingPage() {
                     onDrop={() => handleDrop(i)}
                     onDragEnd={handleDragEnd}
                     className={[
-                      'transition-opacity',
-                      dragOverIndex === i && dragIndexRef.current !== i ? 'border-green-400' : '',
+                      'rounded-lg transition-opacity cursor-grab',
+                      dragOverIndex === i && dragIndexRef.current !== i ? 'ring-2 ring-green-400' : '',
                       dragIndexRef.current === i ? 'opacity-40' : 'opacity-100',
                     ].join(' ')}
                   >
@@ -328,6 +328,7 @@ export function CreateMeetingPage() {
                         participant={p}
                         onEdit={() => setEditingPersonId(p.id)}
                         onRemove={() => dispatch({ type: 'REMOVE_PERSON', id: p.id })}
+                        dragHandle
                       />
                     )}
                   </div>
