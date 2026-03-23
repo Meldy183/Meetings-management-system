@@ -3,12 +3,36 @@ package person
 import (
 	"context"
 	"strings"
+	"unicode"
 
 	"go.uber.org/zap"
 
 	"meetings-editor/internal/domain/person"
 	"meetings-editor/pkg/logger"
 )
+
+// titleCase trims whitespace and capitalises the first letter of every word,
+// lowercasing the rest. Works correctly for multi-byte Unicode (Cyrillic, etc.).
+func titleCase(s string) string {
+	words := strings.Fields(strings.TrimSpace(s))
+	for i, w := range words {
+		runes := []rune(w)
+		runes[0] = unicode.ToUpper(runes[0])
+		for j := 1; j < len(runes); j++ {
+			runes[j] = unicode.ToLower(runes[j])
+		}
+		words[i] = string(runes)
+	}
+	return strings.Join(words, " ")
+}
+
+func normaliseName(p *person.Person) {
+	p.LastName = titleCase(p.LastName)
+	p.FirstName = titleCase(p.FirstName)
+	if p.MiddleName != "" {
+		p.MiddleName = titleCase(p.MiddleName)
+	}
+}
 
 type Service interface {
 	GetAll(ctx context.Context) ([]person.Person, error)
@@ -58,6 +82,7 @@ func (s *service) SortByIDs(ctx context.Context, ids []int) ([]int, error) {
 
 func (s *service) Create(ctx context.Context, p *person.Person) (*person.Person, error) {
 	log := logger.FromContext(ctx)
+	normaliseName(p)
 	log.Info(ctx, "service: creating person",
 		zap.String("last_name", p.LastName),
 		zap.String("first_name", p.FirstName),
@@ -67,6 +92,7 @@ func (s *service) Create(ctx context.Context, p *person.Person) (*person.Person,
 
 func (s *service) Update(ctx context.Context, p *person.Person) (*person.Person, error) {
 	log := logger.FromContext(ctx)
+	normaliseName(p)
 	log.Info(ctx, "service: updating person", zap.Int("id", p.ID))
 	return s.repo.Update(ctx, p)
 }
