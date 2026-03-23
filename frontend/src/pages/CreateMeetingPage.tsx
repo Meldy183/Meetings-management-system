@@ -34,6 +34,7 @@ type WizardAction =
   | { type: 'ADD_AGENDA_ITEM' }
   | { type: 'UPDATE_AGENDA_ITEM'; index: number; item: AgendaItem }
   | { type: 'REMOVE_AGENDA_ITEM'; index: number }
+  | { type: 'REORDER_AGENDA_ITEMS'; items: AgendaItem[] }
 
 function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
@@ -66,6 +67,8 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, agenda_items: state.agenda_items.map((item, i) => i === action.index ? action.item : item) }
     case 'REMOVE_AGENDA_ITEM':
       return { ...state, agenda_items: state.agenda_items.filter((_, i) => i !== action.index) }
+    case 'REORDER_AGENDA_ITEMS':
+      return { ...state, agenda_items: action.items }
     default:
       return state
   }
@@ -96,6 +99,8 @@ export function CreateMeetingPage() {
   const [placeInput, setPlaceInput] = useState('')
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const dragIndexRef = useRef<number | null>(null)
+  const s5Ref = useRef<{ ctx: string; from: number } | null>(null)
+  const [s5Over, setS5Over] = useState<{ ctx: string; idx: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -172,6 +177,39 @@ export function CreateMeetingPage() {
     const [moved] = next.splice(from, 1)
     next.splice(i, 0, moved)
     dispatch({ type: 'REORDER_PEOPLE', people: next })
+  }
+
+  function s5DragStart(ctx: string, from: number) { s5Ref.current = { ctx, from } }
+  function s5DragOver(e: React.DragEvent, ctx: string, idx: number) {
+    e.preventDefault()
+    if (s5Ref.current?.ctx === ctx) setS5Over({ ctx, idx })
+  }
+  function s5DragEnd() { s5Ref.current = null; setS5Over(null) }
+  function s5Drop(ctx: string, to: number) {
+    const src = s5Ref.current
+    s5Ref.current = null
+    setS5Over(null)
+    if (!src || src.ctx !== ctx || src.from === to) return
+    if (ctx === 'people') {
+      const chair = state.people.find(p => p.id === state.chairperson_id)
+      const others = state.people.filter(p => p.id !== state.chairperson_id)
+      const next = [...others]
+      const [moved] = next.splice(src.from, 1)
+      next.splice(to, 0, moved)
+      dispatch({ type: 'REORDER_PEOPLE', people: [...(chair ? [chair] : []), ...next] })
+    } else if (ctx === 'agenda') {
+      const next = [...state.agenda_items]
+      const [moved] = next.splice(src.from, 1)
+      next.splice(to, 0, moved)
+      dispatch({ type: 'REORDER_AGENDA_ITEMS', items: next })
+    } else if (ctx.startsWith('speakers-')) {
+      const ai = parseInt(ctx.slice('speakers-'.length))
+      const item = state.agenda_items[ai]
+      const next = [...item.speaker_ids]
+      const [moved] = next.splice(src.from, 1)
+      next.splice(to, 0, moved)
+      dispatch({ type: 'UPDATE_AGENDA_ITEM', index: ai, item: { ...item, speaker_ids: next } })
+    }
   }
 
   const canProceedStep1 = titleInput.trim() && dateInput && timeInput
@@ -438,7 +476,7 @@ export function CreateMeetingPage() {
               </p>
             </div>
             <div className="py-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
                 <button
                   onClick={handleSort}
@@ -450,29 +488,89 @@ export function CreateMeetingPage() {
               {(() => {
                 const chair = state.people.find(p => p.id === state.chairperson_id)
                 const others = state.people.filter(p => p.id !== state.chairperson_id)
-                return [...(chair ? [chair] : []), ...others].map(p => (
-                  <p key={p.id} className="text-sm mt-0.5">
-                    {fullName(p)}{p.id === state.chairperson_id ? ' (председатель)' : ''}
-                  </p>
-                ))
-              })()}
-            </div>
-            <div className="pt-3">
-              <p className="text-xs text-gray-500">Повестка ({state.agenda_items.length} пунктов)</p>
-              {state.agenda_items.map((item, i) => {
-                const speakers = item.speaker_ids
-                  .map(id => state.people.find(p => p.id === id))
-                  .filter(Boolean)
-                  .map(p => fullName(p!))
                 return (
-                  <div key={i} className="mt-1.5">
-                    <p className="text-sm">{i + 1}. {item.text}</p>
-                    {speakers.map((name, j) => (
-                      <p key={j} className="text-sm text-gray-500 pl-4">{name}</p>
+                  <div className="space-y-1">
+                    {chair && (
+                      <div className="flex items-center gap-2 px-2 py-1 rounded bg-gray-50">
+                        <span className="text-gray-300 text-sm select-none w-3">⠿</span>
+                        <p className="text-sm">{fullName(chair)} <span className="text-gray-400 text-xs">(председатель)</span></p>
+                      </div>
+                    )}
+                    {others.map((p, i) => (
+                      <div
+                        key={p.id}
+                        draggable
+                        onDragStart={() => s5DragStart('people', i)}
+                        onDragOver={e => s5DragOver(e, 'people', i)}
+                        onDrop={() => s5Drop('people', i)}
+                        onDragEnd={s5DragEnd}
+                        className={[
+                          'flex items-center gap-2 px-2 py-1 rounded cursor-grab',
+                          s5Over?.ctx === 'people' && s5Over.idx === i && s5Ref.current?.from !== i ? 'bg-green-50 border border-green-300' : 'bg-gray-50',
+                          s5Ref.current?.ctx === 'people' && s5Ref.current.from === i ? 'opacity-40' : '',
+                        ].join(' ')}
+                      >
+                        <span className="text-gray-400 text-sm select-none w-3">⠿</span>
+                        <p className="text-sm">{fullName(p)}</p>
+                      </div>
                     ))}
                   </div>
                 )
-              })}
+              })()}
+            </div>
+            <div className="pt-3">
+              <p className="text-xs text-gray-500 mb-1">Повестка ({state.agenda_items.length} пунктов)</p>
+              <div className="space-y-1.5">
+                {state.agenda_items.map((item, i) => {
+                  const speakersCtx = `speakers-${i}`
+                  return (
+                    <div
+                      key={i}
+                      draggable
+                      onDragStart={() => s5DragStart('agenda', i)}
+                      onDragOver={e => s5DragOver(e, 'agenda', i)}
+                      onDrop={() => s5Drop('agenda', i)}
+                      onDragEnd={s5DragEnd}
+                      className={[
+                        'p-2 border rounded-lg cursor-grab',
+                        s5Over?.ctx === 'agenda' && s5Over.idx === i && s5Ref.current?.from !== i ? 'border-green-400 bg-green-50' : 'bg-white',
+                        s5Ref.current?.ctx === 'agenda' && s5Ref.current.from === i ? 'opacity-40' : '',
+                      ].join(' ')}
+                    >
+                      <div className="flex items-start gap-2">
+                        <span className="text-gray-400 text-sm select-none w-3 mt-0.5">⠿</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm">{i + 1}. {item.text}</p>
+                          <div className="mt-1 space-y-0.5">
+                            {item.speaker_ids.map((sid, j) => {
+                              const sp = state.people.find(p => p.id === sid)
+                              if (!sp) return null
+                              return (
+                                <div
+                                  key={sid}
+                                  draggable
+                                  onDragStart={e => { e.stopPropagation(); s5DragStart(speakersCtx, j) }}
+                                  onDragOver={e => { e.stopPropagation(); s5DragOver(e, speakersCtx, j) }}
+                                  onDrop={e => { e.stopPropagation(); s5Drop(speakersCtx, j) }}
+                                  onDragEnd={e => { e.stopPropagation(); s5DragEnd() }}
+                                  className={[
+                                    'flex items-center gap-1.5 pl-2 py-0.5 rounded cursor-grab',
+                                    s5Over?.ctx === speakersCtx && s5Over.idx === j && s5Ref.current?.from !== j ? 'bg-green-100' : '',
+                                    s5Ref.current?.ctx === speakersCtx && s5Ref.current.from === j ? 'opacity-40' : '',
+                                  ].join(' ')}
+                                >
+                                  <span className="text-gray-300 text-xs select-none w-2.5">⠿</span>
+                                  <p className="text-sm text-gray-500">{fullName(sp)}</p>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           </div>
 
