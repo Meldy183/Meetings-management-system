@@ -68,23 +68,18 @@ export function ParticipantSearch({ onAdd, existingIds }: Props) {
           {results.map(p => {
             const added = existingIds.includes(p.id)
             return (
-              <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50">
+              <div
+                key={p.id}
+                onClick={() => { if (!added) { onAdd(p); setQuery('') } }}
+                className={`flex items-center justify-between px-3 py-2 bg-white ${added ? 'opacity-50' : 'hover:bg-gray-50 cursor-pointer'}`}
+              >
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">
                     {p.last_name} {p.first_name} {p.middle_name ?? ''}
                   </p>
                   {p.info && <p className="text-xs text-gray-500 truncate">{p.info}</p>}
                 </div>
-                {added ? (
-                  <span className="text-xs text-gray-400 shrink-0 ml-3">Уже добавлен</span>
-                ) : (
-                  <button
-                    onClick={() => { onAdd(p); setQuery('') }}
-                    className="shrink-0 ml-3 bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-green-700"
-                  >
-                    Добавить
-                  </button>
-                )}
+                {added && <span className="text-xs text-gray-400 shrink-0 ml-3">Уже добавлен</span>}
               </div>
             )
           })}

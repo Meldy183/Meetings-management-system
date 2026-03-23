@@ -142,6 +142,23 @@ func (h *PersonHandler) Update(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, toPersonResponse(updated))
 }
 
+// POST /people/sort
+func (h *PersonHandler) Sort(w http.ResponseWriter, r *http.Request) {
+	var req model.SortPeopleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+
+	sorted, err := h.svc.SortByIDs(r.Context(), req.IDs)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+
+	respond(w, http.StatusOK, model.SortPeopleResponse{IDs: sorted})
+}
+
 // DELETE /people/{id}
 func (h *PersonHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.Atoi(r.PathValue("id"))

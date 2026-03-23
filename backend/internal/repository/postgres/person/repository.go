@@ -37,6 +37,12 @@ const (
 		FROM participants
 		WHERE id = ANY($1)`
 
+	querySortByIDs = `
+		SELECT id
+		FROM participants
+		WHERE id = ANY($1)
+		ORDER BY last_name, first_name, middle_name`
+
 	queryUpdate = `
 		UPDATE participants
 		SET last_name = $1, first_name = $2, middle_name = $3, info = $4
@@ -166,6 +172,28 @@ func (r *repository) GetByIDs(ctx context.Context, ids []int) ([]person.Person, 
 			return nil, err
 		}
 		result = append(result, p)
+	}
+	return result, rows.Err()
+}
+
+func (r *repository) SortByIDs(ctx context.Context, ids []int) ([]int, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "repo: sort people by IDs", zap.Int("count", len(ids)))
+
+	rows, err := r.db.Query(ctx, querySortByIDs, ids)
+	if err != nil {
+		log.Error(ctx, "repo: failed to sort people by IDs", zap.Error(err))
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		result = append(result, id)
 	}
 	return result, rows.Err()
 }

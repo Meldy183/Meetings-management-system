@@ -1,8 +1,8 @@
-import { useReducer, useState } from 'react'
+import { useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { createMeeting, addMeetingPerson, setChairperson, addAgendaItem } from '../api/meetings'
-import { updatePerson } from '../api/people'
+import { updatePerson, sortPeople } from '../api/people'
 import { ParticipantSearch } from '../components/ParticipantSearch'
 import { ParticipantCard } from '../components/ParticipantCard'
 import { ParticipantForm } from '../components/ParticipantForm'
@@ -27,6 +27,7 @@ interface WizardState {
 type WizardAction =
   | { type: 'SET_TITLE_DATE'; title: string; date: string; place: string }
   | { type: 'ADD_PERSON'; person: Person }
+  | { type: 'REORDER_PEOPLE'; people: Person[] }
   | { type: 'REMOVE_PERSON'; id: number }
   | { type: 'UPDATE_PERSON'; person: Person }
   | { type: 'SET_CHAIRPERSON'; id: number }
@@ -41,6 +42,8 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
     case 'ADD_PERSON':
       if (state.people.find(p => p.id === action.person.id)) return state
       return { ...state, people: [...state.people, action.person] }
+    case 'REORDER_PEOPLE':
+      return { ...state, people: action.people }
     case 'REMOVE_PERSON': {
       const newPeople = state.people.filter(p => p.id !== action.id)
       return {
@@ -91,7 +94,8 @@ export function CreateMeetingPage() {
   })
   const [timeInput, setTimeInput] = useState('10:00')
   const [placeInput, setPlaceInput] = useState('')
-  const [isSorted, setIsSorted] = useState(true)
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const dragIndexRef = useRef<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -139,31 +143,35 @@ export function CreateMeetingPage() {
     return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
   }
 
-  function displayPeople(people: Person[]) {
-    if (!isSorted) return people
-    return [...people].sort((a, b) => {
-      const l = a.last_name.localeCompare(b.last_name, 'ru')
-      if (l !== 0) return l
-      const f = a.first_name.localeCompare(b.first_name, 'ru')
-      if (f !== 0) return f
-      return (a.middle_name ?? '').localeCompare(b.middle_name ?? '', 'ru')
-    })
+  async function handleAddPerson(p: Person) {
+    const newPeople = [...state.people.filter(ep => ep.id !== p.id), p]
+    dispatch({ type: 'ADD_PERSON', person: p })
+    try {
+      const sortedIds = await sortPeople(newPeople.map(ep => ep.id))
+      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => newPeople.find(ep => ep.id === id)!) })
+    } catch { /* keep unsorted on error */ }
   }
 
-  function SortButton() {
-    return (
-      <button
-        onClick={() => setIsSorted(s => !s)}
-        title={isSorted ? 'Сортировка А-Я (нажмите для отмены)' : 'Порядок добавления (нажмите для сортировки)'}
-        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
-          isSorted
-            ? 'border-green-500 text-green-700 bg-green-50 hover:bg-green-100'
-            : 'border-gray-300 text-gray-400 bg-white hover:bg-gray-50'
-        }`}
-      >
-        {isSorted ? 'Сортировано' : 'Сортировать'}
-      </button>
-    )
+  async function handleSort() {
+    if (state.people.length === 0) return
+    try {
+      const sortedIds = await sortPeople(state.people.map(p => p.id))
+      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
+    } catch { /* ignore */ }
+  }
+
+  function handleDragStart(i: number) { dragIndexRef.current = i }
+  function handleDragOver(e: React.DragEvent, i: number) { e.preventDefault(); setDragOverIndex(i) }
+  function handleDragEnd() { dragIndexRef.current = null; setDragOverIndex(null) }
+  function handleDrop(i: number) {
+    const from = dragIndexRef.current
+    dragIndexRef.current = null
+    setDragOverIndex(null)
+    if (from === null || from === i) return
+    const next = [...state.people]
+    const [moved] = next.splice(from, 1)
+    next.splice(i, 0, moved)
+    dispatch({ type: 'REORDER_PEOPLE', people: next })
   }
 
   const canProceedStep1 = titleInput.trim() && dateInput && timeInput
@@ -240,7 +248,7 @@ export function CreateMeetingPage() {
         <div className="space-y-4">
           <p className="text-sm text-gray-500">Найдите участников по имени или добавьте нового в базу данных.</p>
           <ParticipantSearch
-            onAdd={p => dispatch({ type: 'ADD_PERSON', person: p })}
+            onAdd={handleAddPerson}
             existingIds={state.people.map(p => p.id)}
           />
 
@@ -250,11 +258,28 @@ export function CreateMeetingPage() {
                 <p className="text-sm font-medium text-gray-700">
                   Список участников ({state.people.length})
                 </p>
-                <SortButton />
+                <button
+                  onClick={handleSort}
+                  className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-500 bg-white hover:bg-gray-50"
+                >
+                  Сортировать
+                </button>
               </div>
               <div className="space-y-2">
-                {displayPeople(state.people).map(p => (
-                  <div key={p.id}>
+                {state.people.map((p, i) => (
+                  <div
+                    key={p.id}
+                    draggable
+                    onDragStart={() => handleDragStart(i)}
+                    onDragOver={e => handleDragOver(e, i)}
+                    onDrop={() => handleDrop(i)}
+                    onDragEnd={handleDragEnd}
+                    className={[
+                      'transition-opacity',
+                      dragOverIndex === i && dragIndexRef.current !== i ? 'border-green-400' : '',
+                      dragIndexRef.current === i ? 'opacity-40' : 'opacity-100',
+                    ].join(' ')}
+                  >
                     {editingPersonId === p.id ? (
                       <div className="p-4 border rounded-lg bg-gray-50">
                         <ParticipantForm
@@ -345,7 +370,7 @@ export function CreateMeetingPage() {
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                   <div>
-                    <p className="text-xs font-medium text-gray-600 mb-1">Докладчики *</p>
+                    <p className="text-xs font-medium text-gray-600 mb-1">Докладчики</p>
                     <SpeakerPicker
                       people={state.people}
                       speakerIds={item.speaker_ids}
@@ -415,11 +440,22 @@ export function CreateMeetingPage() {
             <div className="py-3">
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
-                <SortButton />
+                <button
+                  onClick={handleSort}
+                  className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-500 bg-white hover:bg-gray-50"
+                >
+                  Сортировать
+                </button>
               </div>
-              {displayPeople(state.people).map(p => (
-                <p key={p.id} className="text-sm mt-0.5">{fullName(p)}</p>
-              ))}
+              {(() => {
+                const chair = state.people.find(p => p.id === state.chairperson_id)
+                const others = state.people.filter(p => p.id !== state.chairperson_id)
+                return [...(chair ? [chair] : []), ...others].map(p => (
+                  <p key={p.id} className="text-sm mt-0.5">
+                    {fullName(p)}{p.id === state.chairperson_id ? ' (председатель)' : ''}
+                  </p>
+                ))
+              })()}
             </div>
             <div className="pt-3">
               <p className="text-xs text-gray-500">Повестка ({state.agenda_items.length} пунктов)</p>

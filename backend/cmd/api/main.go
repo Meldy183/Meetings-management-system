@@ -72,6 +72,7 @@ func main() {
 
 	mux.HandleFunc("GET /people", ph.List)
 	mux.HandleFunc("POST /people", ph.Create)
+	mux.HandleFunc("POST /people/sort", ph.Sort)
 	mux.HandleFunc("GET /people/{id}", ph.GetByID)
 	mux.HandleFunc("PATCH /people/{id}", ph.Update)
 	mux.HandleFunc("DELETE /people/{id}", ph.Delete)

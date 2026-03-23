@@ -100,6 +100,21 @@ func (mr *MockPersonServiceMockRecorder) GetByID(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockPersonService)(nil).GetByID), ctx, id)
 }
 
+// SortByIDs mocks base method.
+func (m *MockPersonService) SortByIDs(ctx context.Context, ids []int) ([]int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SortByIDs", ctx, ids)
+	ret0, _ := ret[0].([]int)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SortByIDs indicates an expected call of SortByIDs.
+func (mr *MockPersonServiceMockRecorder) SortByIDs(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SortByIDs", reflect.TypeOf((*MockPersonService)(nil).SortByIDs), ctx, ids)
+}
+
 // Search mocks base method.
 func (m *MockPersonService) Search(ctx context.Context, q string) ([]person.Person, error) {
 	m.ctrl.T.Helper()

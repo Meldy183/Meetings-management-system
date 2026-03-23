@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/url"
 	"strconv"
 
 	domMeeting "meetings-editor/internal/domain/meeting"
@@ -594,7 +595,7 @@ func (h *MeetingHandler) ExportAgenda(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendDocx(w, data, "agenda-"+m.ID[:8]+".docx")
+	sendDocx(w, data, "Повестка — "+m.Date.Format("02.01.06 15:04")+".docx")
 }
 
 // GET /meetings/{id}/export/participants
@@ -615,7 +616,7 @@ func (h *MeetingHandler) ExportParticipants(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	sendDocx(w, data, "participants-"+m.ID[:8]+".docx")
+	sendDocx(w, data, "Список участников — "+m.Date.Format("02.01.06 15:04")+".docx")
 }
 
 // --- helpers ---
@@ -639,8 +640,9 @@ func (h *MeetingHandler) fetchMeeting(w http.ResponseWriter, r *http.Request) (*
 }
 
 func sendDocx(w http.ResponseWriter, data []byte, filename string) {
+	encoded := url.PathEscape(filename)
 	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"; filename*=UTF-8''`+encoded)
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)

@@ -14,6 +14,7 @@ type Service interface {
 	GetAll(ctx context.Context) ([]person.Person, error)
 	Search(ctx context.Context, q string) ([]person.Person, error)
 	GetByID(ctx context.Context, id int) (*person.Person, error)
+	SortByIDs(ctx context.Context, ids []int) ([]int, error)
 	Create(ctx context.Context, p *person.Person) (*person.Person, error)
 	Update(ctx context.Context, p *person.Person) (*person.Person, error)
 	Delete(ctx context.Context, id int) error
@@ -47,6 +48,12 @@ func (s *service) GetByID(ctx context.Context, id int) (*person.Person, error) {
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "service: get person by id", zap.Int("id", id))
 	return s.repo.GetByID(ctx, id)
+}
+
+func (s *service) SortByIDs(ctx context.Context, ids []int) ([]int, error) {
+	log := logger.FromContext(ctx)
+	log.Info(ctx, "service: sort people by IDs", zap.Int("count", len(ids)))
+	return s.repo.SortByIDs(ctx, ids)
 }
 
 func (s *service) Create(ctx context.Context, p *person.Person) (*person.Person, error) {

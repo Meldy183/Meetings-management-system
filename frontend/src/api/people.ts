@@ -21,3 +21,10 @@ export function updatePerson(id: number, data: PersonCreate): Promise<Person> {
 export function deletePerson(id: number): Promise<void> {
   return apiFetch<void>(`/people/${id}`, { method: 'DELETE' })
 }
+
+export function sortPeople(ids: number[]): Promise<number[]> {
+  return apiFetch<{ ids: number[] }>('/people/sort', {
+    method: 'POST',
+    body: JSON.stringify({ ids }),
+  }).then(r => r.ids)
+}

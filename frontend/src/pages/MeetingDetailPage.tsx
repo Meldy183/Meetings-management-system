@@ -8,7 +8,7 @@ import {
   addMeetingPerson, removeMeetingPerson,
   addAgendaItem, updateAgendaItem, deleteAgendaItem,
 } from '../api/meetings'
-import { getPeople } from '../api/people'
+import { getPeople, sortPeople } from '../api/people'
 import { ApiError } from '../api/client'
 import { SpeakerPicker } from '../components/SpeakerPicker'
 import type { Person, AgendaItem, Meeting } from '../api/types'
@@ -115,6 +115,17 @@ export function MeetingDetailPage() {
     mutationFn: (ids: number[]) => reorderPeople(id!, ids),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
     onError: () => { if (meeting) setPeople(meeting.people) },
+  })
+
+  const sortPeopleMutation = useMutation({
+    mutationFn: async () => {
+      const sortedIds = await sortPeople(people.map(p => p.id))
+      return sortedIds
+    },
+    onSuccess: (sortedIds) => {
+      setPeople(sortedIds.map(id => people.find(p => p.id === id)!))
+      peopleMutation.mutate(sortedIds)
+    },
   })
 
   const updateMeetingMutation = useMutation({
@@ -408,10 +419,22 @@ export function MeetingDetailPage() {
       <div>
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-gray-700">Участники ({people.length})</h2>
-          {peopleMutation.isPending && <span className="text-xs text-gray-400">Сохранение...</span>}
+          <div className="flex items-center gap-2">
+            {(peopleMutation.isPending || sortPeopleMutation.isPending) && <span className="text-xs text-gray-400">Сохранение...</span>}
+            <button
+              onClick={() => sortPeopleMutation.mutate()}
+              disabled={sortPeopleMutation.isPending || peopleMutation.isPending}
+              className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-500 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              Сортировать
+            </button>
+          </div>
         </div>
         <div className="space-y-1">
-          {people.map((p, i) => (
+          {(() => {
+            const chair = people.find(p => p.id === meeting.chairperson?.id)
+            const others = people.filter(p => p.id !== meeting.chairperson?.id)
+            return [...(chair ? [chair] : []), ...others].map((p, i) => (
             <div
               key={p.id}
               draggable
@@ -442,7 +465,8 @@ export function MeetingDetailPage() {
                 ×
               </button>
             </div>
-          ))}
+          ))
+          })()}
         </div>
 
         {/* Add person search */}
@@ -458,22 +482,16 @@ export function MeetingDetailPage() {
               {searchResults.map(p => {
                 const alreadyIn = people.some(mp => mp.id === p.id)
                 return (
-                  <div key={p.id} className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50">
+                  <div
+                    key={p.id}
+                    onClick={() => { if (!alreadyIn && !addPersonMutation.isPending) addPersonMutation.mutate(p.id) }}
+                    className={`flex items-center justify-between px-3 py-2 bg-white ${alreadyIn ? 'opacity-50' : 'hover:bg-gray-50 cursor-pointer'}`}
+                  >
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{fullName(p)}</p>
                       {p.info && <p className="text-xs text-gray-500 truncate">{p.info}</p>}
                     </div>
-                    {alreadyIn ? (
-                      <span className="text-xs text-gray-400 shrink-0 ml-3">В списке</span>
-                    ) : (
-                      <button
-                        onClick={() => addPersonMutation.mutate(p.id)}
-                        disabled={addPersonMutation.isPending}
-                        className="shrink-0 ml-3 bg-green-600 text-white px-3 py-1 rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Добавить
-                      </button>
-                    )}
+                    {alreadyIn && <span className="text-xs text-gray-400 shrink-0 ml-3">В списке</span>}
                   </div>
                 )
               })}

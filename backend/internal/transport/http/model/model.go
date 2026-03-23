@@ -97,6 +97,14 @@ type ReorderAgendaItemSpeakersRequest struct {
 	PersonIDs []int `json:"person_ids"`
 }
 
+type SortPeopleRequest struct {
+	IDs []int `json:"ids"`
+}
+
+type SortPeopleResponse struct {
+	IDs []int `json:"ids"`
+}
+
 type ErrorResponse struct {
 	Message string      `json:"message"`
 	Details interface{} `json:"details,omitempty"`
