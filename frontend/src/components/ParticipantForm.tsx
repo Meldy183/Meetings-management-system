@@ -47,7 +47,7 @@ export function ParticipantForm({ defaultValues, onSubmit, onCancel, submitLabel
         <input
           {...register('info')}
           className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="Руководитель отдела"
+          placeholder="Руководитель отдела, Центр НТР"
         />
       </div>
       <div className="flex gap-3 pt-1">

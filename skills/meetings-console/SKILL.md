@@ -70,6 +70,12 @@ create-person Smith John "Alexei Petrovich" "Head of Finance"
 
 ---
 
+## Command scope
+
+The console covers every REST endpoint **except** `DELETE /people/{id}` and `DELETE /meetings/{id}`. Those destructive operations are not exposed via the console.
+
+---
+
 ## Commands
 
 ### People

@@ -7,6 +7,7 @@ import { ParticipantSearch } from '../components/ParticipantSearch'
 import { ParticipantCard } from '../components/ParticipantCard'
 import { ParticipantForm } from '../components/ParticipantForm'
 import { StepIndicator } from '../components/StepIndicator'
+import { SpeakerPicker } from '../components/SpeakerPicker'
 import type { Person, PersonCreate } from '../api/types'
 
 interface AgendaItem {
@@ -285,27 +286,11 @@ export function CreateMeetingPage() {
                   />
                   <div>
                     <p className="text-xs font-medium text-gray-600 mb-1">Докладчики *</p>
-                    <div className="space-y-1">
-                      {state.people.map(p => {
-                        const checked = item.speaker_ids.includes(p.id)
-                        return (
-                          <label key={p.id} className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => {
-                                const newIds = checked
-                                  ? item.speaker_ids.filter(id => id !== p.id)
-                                  : [...item.speaker_ids, p.id]
-                                dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, speaker_ids: newIds } })
-                              }}
-                              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                            />
-                            <span className="text-sm text-gray-700">{fullName(p)}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
+                    <SpeakerPicker
+                      people={state.people}
+                      speakerIds={item.speaker_ids}
+                      onChange={ids => dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, speaker_ids: ids } })}
+                    />
                   </div>
                 </div>
                 <button

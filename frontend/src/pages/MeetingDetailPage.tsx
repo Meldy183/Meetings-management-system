@@ -10,6 +10,7 @@ import {
 } from '../api/meetings'
 import { getPeople } from '../api/people'
 import { ApiError } from '../api/client'
+import { SpeakerPicker } from '../components/SpeakerPicker'
 import type { Person, AgendaItem, Meeting } from '../api/types'
 
 function useDragReorder<T>(
@@ -39,6 +40,7 @@ function useDragReorder<T>(
 function fullName(p: Person) {
   return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
 }
+
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -222,12 +224,6 @@ export function MeetingDetailPage() {
 
   function toDatetimeLocal(iso: string) {
     return new Date(iso).toISOString().slice(0, 16)
-  }
-
-  function toggleSpeaker(speakerIds: number[], pid: number): number[] {
-    return speakerIds.includes(pid)
-      ? speakerIds.filter(id => id !== pid)
-      : [...speakerIds, pid]
   }
 
   async function handleDownload(type: 'agenda' | 'participants') {
@@ -497,20 +493,12 @@ export function MeetingDetailPage() {
                     placeholder="Тема пункта повестки"
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500 font-medium">Докладчики (выберите одного или нескольких):</p>
-                  <div className="space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
-                    {people.map(p => (
-                      <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
-                        <input
-                          type="checkbox"
-                          checked={itemForm.speaker_ids.includes(p.id)}
-                          onChange={() => setItemForm(f => ({ ...f, speaker_ids: toggleSpeaker(f.speaker_ids, p.id) }))}
-                          className="rounded"
-                        />
-                        <span className="text-sm">{fullName(p)}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <p className="text-xs text-gray-500 font-medium">Докладчики:</p>
+                  <SpeakerPicker
+                    people={people}
+                    speakerIds={itemForm.speaker_ids}
+                    onChange={ids => setItemForm(f => ({ ...f, speaker_ids: ids }))}
+                  />
                   <div className="flex gap-2">
                     <button
                       onClick={() => setEditingItemId(null)}
@@ -603,20 +591,12 @@ export function MeetingDetailPage() {
               placeholder="Тема пункта повестки"
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-500 font-medium">Докладчики (выберите одного или нескольких):</p>
-            <div className="space-y-1 max-h-40 overflow-y-auto border rounded-lg p-2">
-              {people.map(p => (
-                <label key={p.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 px-1 py-0.5 rounded">
-                  <input
-                    type="checkbox"
-                    checked={newItem.speaker_ids.includes(p.id)}
-                    onChange={() => setNewItem(f => ({ ...f, speaker_ids: toggleSpeaker(f.speaker_ids, p.id) }))}
-                    className="rounded"
-                  />
-                  <span className="text-sm">{fullName(p)}</span>
-                </label>
-              ))}
-            </div>
+            <p className="text-xs text-gray-500 font-medium">Докладчики:</p>
+            <SpeakerPicker
+              people={people}
+              speakerIds={newItem.speaker_ids}
+              onChange={ids => setNewItem(f => ({ ...f, speaker_ids: ids }))}
+            />
             <div className="flex gap-2">
               <button
                 onClick={() => { setShowAddItem(false); setNewItem({ text: '', speaker_ids: [] }) }}

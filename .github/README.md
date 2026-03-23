@@ -117,6 +117,8 @@ BACKEND_URL=http://localhost:8080 go run .
 > quit
 ```
 
+The console covers every REST endpoint **except** `DELETE /people/{id}` and `DELETE /meetings/{id}`.
+
 Full command reference: `skills/meetings-console/SKILL.md`
 
 ### Console environment variables
