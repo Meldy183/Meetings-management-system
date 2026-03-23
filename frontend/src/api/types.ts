@@ -22,12 +22,14 @@ export interface AgendaItem {
 export interface MeetingCreate {
   title: string
   date: string // ISO 8601
+  place?: string
 }
 
 export interface MeetingSummary {
   id: string
   title: string
   date: string
+  place?: string
   chairperson: Person | null
   status: string
   created_at: string
@@ -44,6 +46,7 @@ export interface Meeting {
   id: string
   title: string
   date: string
+  place?: string
   chairperson: Person | null
   agenda_items: AgendaItem[]
   people: Person[]

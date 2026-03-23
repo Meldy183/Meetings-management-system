@@ -32,6 +32,9 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	}
 	body.WriteString(para(pPrCenter() + tnr(chairName, 24)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
+	if m.Place != "" {
+		body.WriteString(para(pPrRight() + tnr(m.Place, 24)))
+	}
 
 	// Agenda items
 	for i, item := range m.AgendaItems {
@@ -65,6 +68,9 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	}
 	body.WriteString(para(pPrCenter() + tnr(pChairName, 24)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
+	if m.Place != "" {
+		body.WriteString(para(pPrRight() + tnr(m.Place, 24)))
+	}
 	body.WriteString(para(pPrLeft())) // blank line before table
 	body.WriteString(participantsTable(m.People))
 

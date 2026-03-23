@@ -58,7 +58,7 @@ export function MeetingDetailPage() {
 
   // Edit meeting metadata state
   const [editingMeeting, setEditingMeeting] = useState(false)
-  const [meetingForm, setMeetingForm] = useState({ title: '', date: '' })
+  const [meetingForm, setMeetingForm] = useState({ title: '', date: '', place: '' })
 
   // Chairperson state
   const [editingChairperson, setEditingChairperson] = useState(false)
@@ -119,7 +119,7 @@ export function MeetingDetailPage() {
   })
 
   const updateMeetingMutation = useMutation({
-    mutationFn: (data: { title: string; date: string }) => updateMeeting(id!, data),
+    mutationFn: (data: { title: string; date: string; place?: string }) => updateMeeting(id!, data),
     onSuccess: (updated) => { setMeetingData(updated); setEditingMeeting(false) },
   })
 
@@ -263,7 +263,7 @@ export function MeetingDetailPage() {
         <div className="flex gap-2 shrink-0">
           <button
             onClick={() => {
-              setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date) })
+              setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date), place: meeting.place ?? '' })
               setEditingMeeting(true)
             }}
             className="text-xs text-gray-500 hover:text-green-600 border rounded px-2 py-1"
@@ -301,6 +301,15 @@ export function MeetingDetailPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
+          <div>
+            <label className="block text-xs text-gray-500 mb-1">Место</label>
+            <input
+              value={meetingForm.place}
+              onChange={e => setMeetingForm(f => ({ ...f, place: e.target.value }))}
+              placeholder="г. Москва, ул. Тверская, д. 13"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
           {updateMeetingMutation.isError && (
             <p className="text-xs text-red-500">
               {updateMeetingMutation.error instanceof ApiError
@@ -320,6 +329,7 @@ export function MeetingDetailPage() {
               onClick={() => updateMeetingMutation.mutate({
                 title: meetingForm.title,
                 date: new Date(meetingForm.date).toISOString(),
+                place: meetingForm.place,
               })}
               className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
             >
@@ -333,6 +343,12 @@ export function MeetingDetailPage() {
             <span className="text-gray-500">Дата</span>
             <span className="font-medium">{formatDate(meeting.date)}</span>
           </div>
+          {meeting.place && (
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">Место</span>
+              <span className="font-medium">{meeting.place}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -14,6 +14,7 @@ type PersonCreateRequest struct {
 type MeetingCreateRequest struct {
 	Title string    `json:"title"`
 	Date  time.Time `json:"date"`
+	Place string    `json:"place,omitempty"`
 }
 
 // Response models
@@ -36,6 +37,7 @@ type MeetingResponse struct {
 	ID          string               `json:"id"`
 	Title       string               `json:"title"`
 	Date        time.Time            `json:"date"`
+	Place       string               `json:"place,omitempty"`
 	Chairperson *PersonResponse      `json:"chairperson"`
 	AgendaItems []AgendaItemResponse `json:"agenda_items"`
 	People      []PersonResponse     `json:"people"`
@@ -47,6 +49,7 @@ type MeetingSummaryResponse struct {
 	ID          string          `json:"id"`
 	Title       string          `json:"title"`
 	Date        time.Time       `json:"date"`
+	Place       string          `json:"place,omitempty"`
 	Chairperson *PersonResponse `json:"chairperson"`
 	Status      string          `json:"status"`
 	CreatedAt   time.Time       `json:"created_at"`
@@ -70,6 +73,7 @@ type ReorderAgendaItemsRequest struct {
 type MeetingUpdateRequest struct {
 	Title string    `json:"title"`
 	Date  time.Time `json:"date"`
+	Place string    `json:"place,omitempty"`
 }
 
 type SetChairpersonRequest struct {

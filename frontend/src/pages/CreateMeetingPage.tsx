@@ -18,13 +18,14 @@ interface AgendaItem {
 interface WizardState {
   title: string
   date: string
+  place: string
   people: Person[]
   chairperson_id: number | null
   agenda_items: AgendaItem[]
 }
 
 type WizardAction =
-  | { type: 'SET_TITLE_DATE'; title: string; date: string }
+  | { type: 'SET_TITLE_DATE'; title: string; date: string; place: string }
   | { type: 'ADD_PERSON'; person: Person }
   | { type: 'REMOVE_PERSON'; id: number }
   | { type: 'UPDATE_PERSON'; person: Person }
@@ -36,7 +37,7 @@ type WizardAction =
 function reducer(state: WizardState, action: WizardAction): WizardState {
   switch (action.type) {
     case 'SET_TITLE_DATE':
-      return { ...state, title: action.title, date: action.date }
+      return { ...state, title: action.title, date: action.date, place: action.place }
     case 'ADD_PERSON':
       if (state.people.find(p => p.id === action.person.id)) return state
       return { ...state, people: [...state.people, action.person] }
@@ -72,6 +73,7 @@ const STEP_LABELS = ['Тема', 'Участники', 'Председатель
 const initialState: WizardState = {
   title: '',
   date: '',
+  place: '',
   people: [],
   chairperson_id: null,
   agenda_items: [],
@@ -84,6 +86,7 @@ export function CreateMeetingPage() {
   const [titleInput, setTitleInput] = useState('Совещание по вопросам ')
   const [dateInput, setDateInput] = useState('')
   const [timeInput, setTimeInput] = useState('10:00')
+  const [placeInput, setPlaceInput] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -104,6 +107,7 @@ export function CreateMeetingPage() {
       const meeting = await createMeeting({
         title: state.title,
         date: new Date(state.date).toISOString(),
+        ...(state.place ? { place: state.place } : {}),
       })
       for (const p of state.people) {
         await addMeetingPerson(meeting.id, p.id)
@@ -177,10 +181,19 @@ export function CreateMeetingPage() {
               />
             </div>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Место</label>
+            <input
+              value={placeInput}
+              onChange={e => setPlaceInput(e.target.value)}
+              placeholder="г. Москва, ул. Тверская, д. 13"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+          </div>
           <button
             disabled={!canProceedStep1}
             onClick={() => {
-              dispatch({ type: 'SET_TITLE_DATE', title: titleInput.trim(), date: `${dateInput}T${timeInput}` })
+              dispatch({ type: 'SET_TITLE_DATE', title: titleInput.trim(), date: `${dateInput}T${timeInput}`, place: placeInput.trim() })
               goNext()
             }}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50"
@@ -352,6 +365,12 @@ export function CreateMeetingPage() {
                 {new Date(state.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
               </p>
             </div>
+            {state.place && (
+              <div className="py-3">
+                <p className="text-xs text-gray-500">Место</p>
+                <p className="text-sm font-medium mt-0.5">{state.place}</p>
+              </div>
+            )}
             <div className="py-3">
               <p className="text-xs text-gray-500">Председательствующий</p>
               <p className="text-sm font-medium mt-0.5">

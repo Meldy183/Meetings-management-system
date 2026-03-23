@@ -17,8 +17,8 @@ import (
 
 const (
 	queryInsertMeeting = `
-		INSERT INTO meetings (title, date)
-		VALUES ($1, $2)
+		INSERT INTO meetings (title, date, place)
+		VALUES ($1, $2, $3)
 		RETURNING id, created_at`
 
 	queryInsertMeetingParticipant = `
@@ -28,7 +28,7 @@ const (
 	queryCountMeetings = `SELECT COUNT(*) FROM meetings`
 
 	queryListMeetings = `
-		SELECT m.id, m.title, m.date, m.created_at,
+		SELECT m.id, m.title, m.date, m.place, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meetings m
 		LEFT JOIN participants p ON p.id = m.chairperson_id
@@ -49,7 +49,7 @@ const (
 		ORDER BY meeting_id, position`
 
 	queryGetMeeting = `
-		SELECT m.id, m.title, m.date, m.created_at,
+		SELECT m.id, m.title, m.date, m.place, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meetings m
 		LEFT JOIN participants p ON p.id = m.chairperson_id
@@ -84,7 +84,7 @@ const (
 		WHERE id = $1 AND meeting_id = $3`
 
 	queryUpdateMeeting = `
-		UPDATE meetings SET title = $2, date = $3
+		UPDATE meetings SET title = $2, date = $3, place = $4
 		WHERE id = $1`
 
 	querySetChairperson = `
@@ -179,7 +179,7 @@ func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.M
 		var cID *int
 		var cLast, cFirst, cMiddle, cInfo *string
 		err := rows.Scan(
-			&m.ID, &m.Title, &m.Date, &m.CreatedAt,
+			&m.ID, &m.Title, &m.Date, &m.Place, &m.CreatedAt,
 			&cID, &cLast, &cFirst, &cMiddle, &cInfo,
 		)
 		if err != nil {
@@ -247,7 +247,7 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	var cID *int
 	var cLast, cFirst, cMiddle, cInfo *string
 	err := r.db.QueryRow(ctx, queryGetMeeting, id).Scan(
-		&m.ID, &m.Title, &m.Date, &m.CreatedAt,
+		&m.ID, &m.Title, &m.Date, &m.Place, &m.CreatedAt,
 		&cID, &cLast, &cFirst, &cMiddle, &cInfo,
 	)
 	if err != nil {
@@ -362,8 +362,8 @@ func (r *repository) ReorderAgendaItems(ctx context.Context, meetingID string, a
 	return tx.Commit(ctx)
 }
 
-func (r *repository) Update(ctx context.Context, id string, title string, date time.Time) error {
-	tag, err := r.db.Exec(ctx, queryUpdateMeeting, id, title, date)
+func (r *repository) Update(ctx context.Context, id string, title string, date time.Time, place string) error {
+	tag, err := r.db.Exec(ctx, queryUpdateMeeting, id, title, date, place)
 	if err != nil {
 		return err
 	}
@@ -520,7 +520,7 @@ func (r *repository) Create(ctx context.Context, m *meeting.Meeting) (*meeting.M
 	log := logger.FromContext(ctx)
 	log.Info(ctx, "repo: creating meeting", zap.String("title", m.Title))
 
-	err := r.db.QueryRow(ctx, queryInsertMeeting, m.Title, m.Date).
+	err := r.db.QueryRow(ctx, queryInsertMeeting, m.Title, m.Date, m.Place).
 		Scan(&m.ID, &m.CreatedAt)
 	if err != nil {
 		log.Error(ctx, "repo: failed to insert meeting", zap.Error(err))

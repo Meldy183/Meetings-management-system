@@ -18,12 +18,14 @@ import (
 type CreateRequest struct {
 	Title string
 	Date  time.Time
+	Place string
 }
 
 // UpdateRequest is the service-level input for updating meeting metadata.
 type UpdateRequest struct {
 	Title string
 	Date  time.Time
+	Place string
 }
 
 // --- error types ---
@@ -141,12 +143,13 @@ func (s *service) Create(ctx context.Context, req *CreateRequest) (*domMeeting.M
 	m := &domMeeting.Meeting{
 		Title: req.Title,
 		Date:  req.Date,
+		Place: req.Place,
 	}
 	return s.repo.Create(ctx, m)
 }
 
 func (s *service) Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error) {
-	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date); err != nil {
+	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date, req.Place); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)

@@ -11,6 +11,7 @@ type Meeting struct {
 	ID          string       `json:"id"`
 	Title       string       `json:"title"`
 	Date        time.Time    `json:"date"`
+	Place       string       `json:"place,omitempty"`
 	Chairperson *Person      `json:"chairperson"`
 	AgendaItems []AgendaItem `json:"agenda_items"`
 	People      []Person     `json:"people"`
@@ -22,6 +23,7 @@ type MeetingSummary struct {
 	ID          string    `json:"id"`
 	Title       string    `json:"title"`
 	Date        time.Time `json:"date"`
+	Place       string    `json:"place,omitempty"`
 	Chairperson *Person   `json:"chairperson"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -43,6 +45,7 @@ type AgendaItem struct {
 type MeetingUpdateRequest struct {
 	Title string    `json:"title"`
 	Date  time.Time `json:"date"`
+	Place string    `json:"place,omitempty"`
 }
 
 func (c *Client) ListMeetings(ctx context.Context, limit, offset int) (*MeetingList, error) {
@@ -51,12 +54,16 @@ func (c *Client) ListMeetings(ctx context.Context, limit, offset int) (*MeetingL
 	return &list, err
 }
 
-func (c *Client) CreateMeeting(ctx context.Context, title string, date time.Time) (*Meeting, error) {
+func (c *Client) CreateMeeting(ctx context.Context, title string, date time.Time, place string) (*Meeting, error) {
 	var m Meeting
-	err := c.do(ctx, "POST", "/meetings", map[string]interface{}{
+	body := map[string]interface{}{
 		"title": title,
 		"date":  date,
-	}, &m)
+	}
+	if place != "" {
+		body["place"] = place
+	}
+	err := c.do(ctx, "POST", "/meetings", body, &m)
 	return &m, err
 }
 

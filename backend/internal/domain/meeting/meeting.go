@@ -16,6 +16,7 @@ type Meeting struct {
 	ID          string
 	Title       string
 	Date        time.Time
+	Place       string
 	Chairperson *person.Person // nil when not yet assigned
 	AgendaItems []AgendaItem
 	People      []person.Person
@@ -34,7 +35,7 @@ type Repository interface {
 	GetAll(ctx context.Context, limit, offset int) ([]Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*Meeting, error)
 	Create(ctx context.Context, m *Meeting) (*Meeting, error)
-	Update(ctx context.Context, id string, title string, date time.Time) error
+	Update(ctx context.Context, id string, title string, date time.Time, place string) error
 	SetChairperson(ctx context.Context, meetingID string, personID int) error
 	Delete(ctx context.Context, id string) error
 	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error

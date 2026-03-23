@@ -78,6 +78,7 @@ func (h *MeetingHandler) Create(w http.ResponseWriter, r *http.Request) {
 	svcReq := &svcMeeting.CreateRequest{
 		Title: req.Title,
 		Date:  req.Date,
+		Place: req.Place,
 	}
 
 	m, err := h.svc.Create(r.Context(), svcReq)
@@ -131,6 +132,7 @@ func (h *MeetingHandler) Update(w http.ResponseWriter, r *http.Request) {
 	m, err := h.svc.Update(r.Context(), id, &svcMeeting.UpdateRequest{
 		Title: req.Title,
 		Date:  req.Date,
+		Place: req.Place,
 	})
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
@@ -676,6 +678,7 @@ func toMeetingSummaryResponse(m *domMeeting.Meeting) model.MeetingSummaryRespons
 		ID:          m.ID,
 		Title:       m.Title,
 		Date:        m.Date,
+		Place:       m.Place,
 		Chairperson: chairperson,
 		Status:      m.Status(),
 		CreatedAt:   m.CreatedAt,
@@ -711,6 +714,7 @@ func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
 		ID:          m.ID,
 		Title:       m.Title,
 		Date:        m.Date,
+		Place:       m.Place,
 		Chairperson: chairperson,
 		AgendaItems: items,
 		People:      people,

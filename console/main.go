@@ -226,13 +226,19 @@ func (r *repl) dispatch(ctx context.Context, line string) error {
 
 	case "create-meeting":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: create-meeting <title> <date YYYY-MM-DD>")
+			return fmt.Errorf("usage: create-meeting <title> <date YYYY-MM-DD> [place|-]")
 		}
 		date, err := parseDate(args[1])
 		if err != nil {
 			return err
 		}
-		m, err := r.client.CreateMeeting(ctx, args[0], date)
+		place := ""
+		if len(args) >= 3 {
+			if args[2] != "-" {
+				place = args[2]
+			}
+		}
+		m, err := r.client.CreateMeeting(ctx, args[0], date, place)
 		if err != nil {
 			return err
 		}
@@ -280,13 +286,19 @@ func (r *repl) dispatch(ctx context.Context, line string) error {
 
 	case "update-meeting":
 		if len(args) < 3 {
-			return fmt.Errorf("usage: update-meeting <id> <title> <date YYYY-MM-DD>")
+			return fmt.Errorf("usage: update-meeting <id> <title> <date YYYY-MM-DD> [place|-]")
 		}
 		date, err := parseDate(args[2])
 		if err != nil {
 			return err
 		}
-		m, err := r.client.UpdateMeeting(ctx, args[0], MeetingUpdateRequest{Title: args[1], Date: date})
+		place := ""
+		if len(args) >= 4 {
+			if args[3] != "-" {
+				place = args[3]
+			}
+		}
+		m, err := r.client.UpdateMeeting(ctx, args[0], MeetingUpdateRequest{Title: args[1], Date: date, Place: place})
 		if err != nil {
 			return err
 		}
@@ -506,12 +518,12 @@ func printHelp() {
 
 Meetings:
   list-meetings [limit] [offset]
-  create-meeting <title> <date YYYY-MM-DD>
+  create-meeting <title> <date YYYY-MM-DD> [place|-]
   get-meeting <id>
   get-meeting-meta <id>
   get-meeting-people <id>
   get-meeting-agenda <id>
-  update-meeting <id> <title> <date YYYY-MM-DD>
+  update-meeting <id> <title> <date YYYY-MM-DD> [place|-]
   set-chairperson <meeting_id> <person_id>
   add-person <meeting_id> <person_id>
   remove-person <meeting_id> <person_id>

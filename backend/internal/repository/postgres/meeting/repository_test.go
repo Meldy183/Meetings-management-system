@@ -78,7 +78,7 @@ func TestMeetingRepo_Update(t *testing.T) {
 	m := seedMeeting(t, repo, "Оригинал")
 	newDate := time.Date(2027, 1, 1, 9, 0, 0, 0, time.UTC)
 
-	if err := repo.Update(ctx, m.ID, "Изменён", newDate); err != nil {
+	if err := repo.Update(ctx, m.ID, "Изменён", newDate, ""); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestMeetingRepo_Update_NotFound(t *testing.T) {
 	repo := New(pool)
 	ctx := testutil.Ctx()
 
-	err := repo.Update(ctx, "00000000-0000-0000-0000-000000000000", "X", time.Now())
+	err := repo.Update(ctx, "00000000-0000-0000-0000-000000000000", "X", time.Now(), "")
 	if err != errs.ErrNotFound {
 		t.Errorf("want ErrNotFound, got %v", err)
 	}

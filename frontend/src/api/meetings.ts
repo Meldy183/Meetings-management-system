@@ -13,7 +13,7 @@ export function getMeeting(id: string): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${id}`)
 }
 
-export function updateMeeting(id: string, data: { title: string; date: string }): Promise<Meeting> {
+export function updateMeeting(id: string, data: { title: string; date: string; place?: string }): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
 }
 
