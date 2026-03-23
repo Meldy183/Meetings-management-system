@@ -152,8 +152,8 @@ export function CreateMeetingPage() {
             <textarea
               value={titleInput}
               onChange={e => setTitleInput(e.target.value)}
-              rows={3}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              rows={2}
+              className="w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
             />
           </div>
           <div>
