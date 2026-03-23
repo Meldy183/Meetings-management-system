@@ -56,7 +56,8 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК участников совещания "+m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК УЧАСТНИКОВ", 28)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	pChairName := ""
 	if m.Chairperson != nil {
