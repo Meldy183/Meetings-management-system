@@ -76,6 +76,8 @@ The console covers every REST endpoint **except** `DELETE /people/{id}` and `DEL
 
 ---
 
+---
+
 ## Commands
 
 ### People
@@ -150,6 +152,22 @@ update-person 5 Smith Jane "Alexei Petrovich" "Deputy Director"
 Returns: updated Person object.
 Error 404 if person not found.
 Error 409 if the new name combination already belongs to a different person.
+
+---
+
+#### `sort-people <id1,id2,...>`
+Return the given person IDs reordered alphabetically by last_name, first_name, middle_name.
+Useful for determining the canonical sort order of a set of participants before persisting it.
+
+```
+sort-people 17,5,42
+```
+
+Returns: JSON array of integers — the same IDs in alphabetical order.
+
+```json
+[42, 17, 5]
+```
 
 ---
 

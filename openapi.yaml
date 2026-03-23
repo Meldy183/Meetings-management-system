@@ -106,6 +106,41 @@ paths:
                 details:
                   existing_id: 55
 
+  /people/sort:
+    post:
+      tags:
+        - people
+      summary: Sort person IDs alphabetically
+      description: >
+        Accepts a list of person IDs and returns them reordered by
+        last_name, first_name, middle_name (ascending). Used to determine
+        the canonical alphabetical order of a set of participants.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SortPeopleRequest'
+            example:
+              ids: [17, 5, 42]
+      responses:
+        '200':
+          description: IDs in alphabetical order
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SortPeopleResponse'
+              example:
+                ids: [42, 17, 5]
+        '400':
+          description: Malformed request body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBadRequest'
+        '500':
+          description: Internal server error
+
   /people/{id}:
     get:
       tags:
@@ -1336,31 +1371,31 @@ components:
           description: Role/position info
           example: Главный аналитик
 
-    AgendaItemCreate:
+    SortPeopleRequest:
       type: object
-      description: >
-        Payload for creating or fully replacing an agenda item.
-        At least one speaker ID is required; all speakers must already be
-        in the meeting's people list.
+      description: List of person IDs to sort alphabetically.
       required:
-        - text
-        - speaker_ids
+        - ids
       properties:
-        text:
-          type: string
-          description: >
-            Topic/title of the agenda item as it will appear
-            in the Повестка document
-          example: Об институте AIRI и видении применения ИИ в науке
-        speaker_ids:
+        ids:
           type: array
           items:
             type: integer
-          minItems: 1
-          description: >
-            IDs of the people presenting this item (докладчики).
-            All IDs must already be in the meeting's people list.
-          example: [17, 42]
+          description: Person IDs to sort
+          example: [17, 5, 42]
+
+    SortPeopleResponse:
+      type: object
+      description: The same person IDs reordered by last_name, first_name, middle_name.
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          items:
+            type: integer
+          description: Person IDs in alphabetical order
+          example: [42, 17, 5]
 
     AgendaItem:
       type: object

@@ -45,3 +45,17 @@ func (c *Client) UpdatePerson(ctx context.Context, id int, req PersonCreateReque
 	err := c.do(ctx, "PATCH", fmt.Sprintf("/people/%d", id), req, &p)
 	return &p, err
 }
+
+type sortPeopleRequest struct {
+	IDs []int `json:"ids"`
+}
+
+type sortPeopleResponse struct {
+	IDs []int `json:"ids"`
+}
+
+func (c *Client) SortPeople(ctx context.Context, ids []int) ([]int, error) {
+	var resp sortPeopleResponse
+	err := c.do(ctx, "POST", "/people/sort", sortPeopleRequest{IDs: ids}, &resp)
+	return resp.IDs, err
+}

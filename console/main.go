@@ -200,6 +200,20 @@ func (r *repl) dispatch(ctx context.Context, line string) error {
 		}
 		printJSON(p)
 
+	case "sort-people":
+		if len(args) < 1 {
+			return fmt.Errorf("usage: sort-people <id1,id2,...>")
+		}
+		ids, err := parseIDs(args[0])
+		if err != nil {
+			return err
+		}
+		sorted, err := r.client.SortPeople(ctx, ids)
+		if err != nil {
+			return err
+		}
+		printJSON(sorted)
+
 	// ── Meetings ─────────────────────────────────────────────────────────────
 
 	case "list-meetings":
@@ -515,6 +529,7 @@ func printHelp() {
   get-person <id>
   create-person <last_name> <first_name> [middle_name|-] [info|-]
   update-person <id> <last_name> <first_name> [middle_name|-] [info|-]
+  sort-people <id1,id2,...>
 
 Meetings:
   list-meetings [limit] [offset]

@@ -117,7 +117,7 @@ BACKEND_URL=http://localhost:8080 go run .
 > quit
 ```
 
-The console covers every REST endpoint **except** `DELETE /people/{id}` and `DELETE /meetings/{id}`.
+The console covers every REST endpoint **except** `DELETE /people/{id}` and `DELETE /meetings/{id}` (destructive operations not exposed via the console).
 
 Full command reference: `skills/meetings-console/SKILL.md`
 
@@ -139,6 +139,7 @@ Full command reference: `skills/meetings-console/SKILL.md`
 | `GET` | `/people?q=...` | Search — word-by-word partial match via pg_trgm |
 | `GET` | `/people/{id}` | Get a single person by ID |
 | `POST` | `/people` | Create a person (409 if name already exists) |
+| `POST` | `/people/sort` | Return given person IDs sorted alphabetically by name |
 | `PATCH` | `/people/{id}` | Update person — last_name and first_name required |
 | `DELETE` | `/people/{id}` | Delete a person (409 if referenced in any meeting) |
 

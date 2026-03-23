@@ -86,5 +86,20 @@ func registerPeopleTools(server *mcp.Server, c *client.Client) error {
 		return fmt.Errorf("update_person: %w", err)
 	}
 
+	// sort_people
+	type SortPeopleArgs struct {
+		IDs []int `json:"ids" jsonschema:"required,description=Person IDs to sort alphabetically by last_name then first_name then middle_name"`
+	}
+	if err := server.RegisterTool("sort_people", "Return the given person IDs sorted alphabetically by last_name, first_name, middle_name",
+		func(ctx context.Context, args SortPeopleArgs) (*mcp.ToolResponse, error) {
+			sorted, err := c.SortPeople(ctx, args.IDs)
+			if err != nil {
+				return nil, err
+			}
+			return jsonResponse(client.SortPeopleResponse{IDs: sorted})
+		}); err != nil {
+		return fmt.Errorf("sort_people: %w", err)
+	}
+
 	return nil
 }
