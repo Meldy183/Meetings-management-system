@@ -119,12 +119,18 @@ export function MeetingDetailPage() {
 
   const sortPeopleMutation = useMutation({
     mutationFn: async () => {
-      const sortedIds = await sortPeople(people.map(p => p.id))
+      const chairId = meeting?.chairperson?.id
+      const nonChair = people.filter(p => p.id !== chairId)
+      const sortedIds = await sortPeople(nonChair.map(p => p.id))
       return sortedIds
     },
     onSuccess: (sortedIds) => {
-      setPeople(sortedIds.map(id => people.find(p => p.id === id)!))
-      peopleMutation.mutate(sortedIds)
+      const chairId = meeting?.chairperson?.id
+      const chairPerson = people.find(p => p.id === chairId)
+      const sortedOthers = sortedIds.map(id => people.find(p => p.id === id)!)
+      const allPeople = [...(chairPerson ? [chairPerson] : []), ...sortedOthers]
+      setPeople(allPeople)
+      peopleMutation.mutate(allPeople.map(p => p.id))
     },
   })
 
@@ -220,9 +226,14 @@ export function MeetingDetailPage() {
     agendaMutation.mutate(reordered.map(i => i.id))
   })
 
-  const peopleDnd = useDragReorder(people, (reordered) => {
-    setPeople(reordered)
-    peopleMutation.mutate(reordered.map(p => p.id))
+  const chairpersonId = meeting?.chairperson?.id
+  const chair = people.find(p => p.id === chairpersonId)
+  const others = people.filter(p => p.id !== chairpersonId)
+
+  const peopleDnd = useDragReorder(others, (reordered) => {
+    const allPeople = [...(chair ? [chair] : []), ...reordered]
+    setPeople(allPeople)
+    peopleMutation.mutate(allPeople.map(p => p.id))
   })
 
   function formatDate(iso: string) {
@@ -431,10 +442,23 @@ export function MeetingDetailPage() {
           </div>
         </div>
         <div className="space-y-1">
-          {(() => {
-            const chair = people.find(p => p.id === meeting.chairperson?.id)
-            const others = people.filter(p => p.id !== meeting.chairperson?.id)
-            return [...(chair ? [chair] : []), ...others].map((p, i) => (
+          {chair && (
+            <div className="bg-white border rounded-lg p-3 flex items-center gap-3">
+              <span className="text-gray-200 select-none text-lg leading-none">⠿</span>
+              <span className="text-xs text-gray-400 w-5 shrink-0">1.</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{fullName(chair)}</p>
+                {chair.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{chair.info}</p>}
+              </div>
+              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0">Пред.</span>
+              <button
+                onClick={() => { if (confirm(`Удалить ${chair.last_name} из совещания?`)) removePersonMutation.mutate(chair.id) }}
+                className="shrink-0 text-gray-300 hover:text-red-500 text-lg leading-none"
+                title="Удалить из совещания"
+              >×</button>
+            </div>
+          )}
+          {others.map((p, i) => (
             <div
               key={p.id}
               draggable
@@ -443,30 +467,24 @@ export function MeetingDetailPage() {
               onDrop={() => peopleDnd.handleDrop(i)}
               onDragEnd={peopleDnd.handleDragEnd}
               className={[
-                'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity',
+                'bg-white border rounded-lg p-3 flex items-center gap-3 transition-opacity cursor-grab',
                 peopleDnd.dragOverIndex === i && peopleDnd.dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
                 peopleDnd.dragIndex.current === i ? 'opacity-40' : 'opacity-100',
               ].join(' ')}
             >
               <span className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing select-none text-lg leading-none">⠿</span>
-              <span className="text-xs text-gray-400 w-5 shrink-0">{i + 1}.</span>
+              <span className="text-xs text-gray-400 w-5 shrink-0">{chair ? i + 2 : i + 1}.</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{fullName(p)}</p>
                 {p.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{p.info}</p>}
               </div>
-              {meeting.chairperson?.id === p.id && (
-                <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0">Пред.</span>
-              )}
               <button
                 onClick={() => { if (confirm(`Удалить ${p.last_name} из совещания?`)) removePersonMutation.mutate(p.id) }}
                 className="shrink-0 text-gray-300 hover:text-red-500 text-lg leading-none"
                 title="Удалить из совещания"
-              >
-                ×
-              </button>
+              >×</button>
             </div>
-          ))
-          })()}
+          ))}
         </div>
 
         {/* Add person search */}
