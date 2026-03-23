@@ -106,7 +106,7 @@ export function CreateMeetingPage() {
     try {
       const meeting = await createMeeting({
         title: state.title,
-        date: new Date(state.date).toISOString(),
+        date: state.date + ':00.000Z',
         ...(state.place ? { place: state.place } : {}),
       })
       for (const p of state.people) {
@@ -302,7 +302,7 @@ export function CreateMeetingPage() {
             {state.agenda_items.map((item, i) => (
               <div key={i} className="flex gap-2 items-start p-3 bg-white border rounded-lg">
                 <span className="text-sm font-medium text-gray-400 mt-2 w-5 shrink-0">{i + 1}.</span>
-                <div className="flex-1 space-y-2">
+                <div className="flex-1 min-w-0 space-y-2">
                   <input
                     value={item.text}
                     onChange={e => dispatch({ type: 'UPDATE_AGENDA_ITEM', index: i, item: { ...item, text: e.target.value } })}
@@ -362,7 +362,7 @@ export function CreateMeetingPage() {
             <div className="py-3">
               <p className="text-xs text-gray-500">Дата и время</p>
               <p className="text-sm font-medium mt-0.5">
-                {new Date(state.date).toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                {new Date(state.date + ':00.000Z').toLocaleString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })}
               </p>
             </div>
             {state.place && (

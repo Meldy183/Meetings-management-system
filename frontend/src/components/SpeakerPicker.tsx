@@ -48,7 +48,7 @@ export function SpeakerPicker({
               onDrop={() => handleDrop(i)}
               onDragEnd={handleDragEnd}
               className={[
-                'flex items-center gap-2 px-2 py-1.5 bg-white border rounded-lg text-sm transition-opacity',
+                'flex items-center min-w-0 overflow-hidden gap-2 px-2 py-1.5 bg-white border rounded-lg text-sm transition-opacity',
                 dragOverIndex === i && dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
                 dragIndex.current === i ? 'opacity-40' : '',
               ].join(' ')}
@@ -73,7 +73,7 @@ export function SpeakerPicker({
             <div
               key={p.id}
               onClick={() => onChange([...speakerIds, p.id])}
-              className="flex items-center px-3 py-2 bg-white hover:bg-gray-50 cursor-pointer text-sm"
+              className="flex items-center min-w-0 overflow-hidden px-3 py-2 bg-white hover:bg-gray-50 cursor-pointer text-sm"
             >
               <span className="flex-1 truncate">{fullName(p)}</span>
               {p.info && <span className="text-xs text-gray-400 ml-2 truncate max-w-[40%]">{p.info}</span>}

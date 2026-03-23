@@ -218,12 +218,12 @@ export function MeetingDetailPage() {
   function formatDate(iso: string) {
     return new Date(iso).toLocaleString('ru-RU', {
       day: 'numeric', month: 'long', year: 'numeric',
-      hour: '2-digit', minute: '2-digit',
+      hour: '2-digit', minute: '2-digit', timeZone: 'UTC',
     })
   }
 
   function toDatetimeLocal(iso: string) {
-    return new Date(iso).toISOString().slice(0, 16)
+    return iso.slice(0, 16)
   }
 
   async function handleDownload(type: 'agenda' | 'participants') {
@@ -328,7 +328,7 @@ export function MeetingDetailPage() {
               disabled={!meetingForm.title || !meetingForm.date || updateMeetingMutation.isPending}
               onClick={() => updateMeetingMutation.mutate({
                 title: meetingForm.title,
-                date: new Date(meetingForm.date).toISOString(),
+                date: meetingForm.date + ':00.000Z',
                 place: meetingForm.place,
               })}
               className="flex-1 bg-green-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"

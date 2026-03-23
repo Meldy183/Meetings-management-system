@@ -24,27 +24,28 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 24)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	chairName := ""
 	if m.Chairperson != nil {
 		chairName = shortName(*m.Chairperson)
 	}
-	body.WriteString(para(pPrCenter() + tnr(chairName, 24)))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
+	body.WriteString(para(pPrCenter() + tnr(chairName, 28)))
+	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
-		body.WriteString(para(pPrRight() + tnr(m.Place, 24)))
+		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
 	}
+	body.WriteString(para(pPrLeft())) // blank line between header and agenda items
 
 	// Agenda items
 	for i, item := range m.AgendaItems {
 		roman := toRoman(i + 1)
-		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 28)))
+		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 27)))
 		label := "Докладчик:"
 		if len(item.Speakers) > 1 {
 			label = "Докладчики:"
 		}
-		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 28)))
+		body.WriteString(para(pPrCenterSpaced() + tnrBoldUnderline(label, 27)))
 		for _, spk := range item.Speakers {
 			body.WriteString(agendaTable(spk))
 		}
@@ -60,16 +61,16 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК УЧАСТНИКОВ", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 24)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
+	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
 	pChairName := ""
 	if m.Chairperson != nil {
 		pChairName = shortName(*m.Chairperson)
 	}
-	body.WriteString(para(pPrCenter() + tnr(pChairName, 24)))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
+	body.WriteString(para(pPrCenter() + tnr(pChairName, 28)))
+	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
-		body.WriteString(para(pPrRight() + tnr(m.Place, 24)))
+		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
 	}
 	body.WriteString(para(pPrLeft())) // blank line before table
 	body.WriteString(participantsTable(m.People))
@@ -96,6 +97,11 @@ func pPrRight() string {
 // pPrLeft returns left-aligned paragraph properties with standard line spacing.
 func pPrLeft() string {
 	return `<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`
+}
+
+// pPrCenterSpaced returns centered paragraph properties with 120-twip spacing above and below.
+func pPrCenterSpaced() string {
+	return `<w:pPr><w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>`
 }
 
 // tnr produces a Times New Roman run at the given half-point size.
@@ -176,13 +182,13 @@ func agendaTable(sp person.Person) string {
 </w:tbl>`, nameCell, tnrCell("–", 28), tnrCell(sp.Info, 28))
 }
 
-// participantsTable renders a borderless 4-column table: № | name | "–" | info.
+// participantsTable renders a borderless 4-column table: № | name | "-" | info.
 func participantsTable(participants []person.Person) string {
 	var sb strings.Builder
 	sb.WriteString(`
 <w:tbl>
   <w:tblPr>
-    <w:tblW w:w="9354" w:type="dxa"/>
+    <w:tblW w:w="9810" w:type="dxa"/>
     <w:tblBorders>
       <w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>
       <w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>
@@ -199,12 +205,12 @@ func participantsTable(participants []person.Person) string {
     <w:tc><w:tcPr><w:tcW w:w="566" w:type="dxa"/></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="3742" w:type="dxa"/></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="323" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="4723" w:type="dxa"/></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="5179" w:type="dxa"/></w:tcPr>%s</w:tc>
   </w:tr>`,
-			tnrCell(fmt.Sprintf("%d.", i+1), 24),
-			tnrCellNameSplit(p, 24),
-			tnrCell("–", 24),
-			tnrCell(p.Info, 24),
+			tnrCell(fmt.Sprintf("%d.", i+1), 28),
+			tnrCellNameSplit(p, 27),
+			tnrCell("-", 28),
+			tnrCell(p.Info, 28),
 		))
 	}
 
@@ -307,7 +313,7 @@ func formatDate(t time.Time) string {
 		"января", "февраля", "марта", "апреля", "мая", "июня",
 		"июля", "августа", "сентября", "октября", "ноября", "декабря",
 	}
-	return fmt.Sprintf("%d %s %d г., %02d.%02d",
+	return fmt.Sprintf("%d %s %d г., %02d:%02d",
 		t.Day(), months[t.Month()-1], t.Year(), t.Hour(), t.Minute())
 }
 
