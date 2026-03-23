@@ -227,9 +227,9 @@ export function MeetingDetailPage() {
     agendaMutation.mutate(reordered.map(i => i.id))
   })
 
-  const chairpersonId = meeting?.chairperson?.id
-  const chair = people.find(p => p.id === chairpersonId)
-  const others = people.filter(p => p.id !== chairpersonId)
+  const meetingChairId = meeting?.chairperson?.id
+  const chair = people.find(p => p.id === meetingChairId)
+  const others = people.filter(p => p.id !== meetingChairId)
 
   const peopleDnd = useDragReorder(others, (reordered) => {
     const allPeople = [...(chair ? [chair] : []), ...reordered]
