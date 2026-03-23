@@ -28,7 +28,7 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
 	chairName := ""
 	if m.Chairperson != nil {
-		chairName = fullName(*m.Chairperson)
+		chairName = shortName(*m.Chairperson)
 	}
 	body.WriteString(para(pPrCenter() + tnr(chairName, 24)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
@@ -64,7 +64,7 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
 	pChairName := ""
 	if m.Chairperson != nil {
-		pChairName = fullName(*m.Chairperson)
+		pChairName = shortName(*m.Chairperson)
 	}
 	body.WriteString(para(pPrCenter() + tnr(pChairName, 24)))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
@@ -288,6 +288,18 @@ func fullName(p person.Person) string {
 		name += " " + p.MiddleName
 	}
 	return name
+}
+
+// shortName returns "И. О. Фамилия" — initials then full surname.
+func shortName(p person.Person) string {
+	var s string
+	if r := []rune(p.FirstName); len(r) > 0 {
+		s += string(r[0]) + ". "
+	}
+	if r := []rune(p.MiddleName); len(r) > 0 {
+		s += string(r[0]) + ". "
+	}
+	return strings.TrimSpace(s + p.LastName)
 }
 
 func formatDate(t time.Time) string {
