@@ -199,13 +199,14 @@ export function MeetingDetailPage() {
   }
   function handleSpeakerDragOver(e: React.DragEvent, itemId: number, index: number) {
     e.preventDefault()
-    setSpeakerDragOver({ itemId, index })
+    // Only highlight if hovering within the same agenda item
+    if (speakerDragSrc.current?.itemId === itemId) setSpeakerDragOver({ itemId, index })
   }
-  function handleSpeakerDrop(toIndex: number) {
+  function handleSpeakerDrop(itemId: number, toIndex: number) {
     const src = speakerDragSrc.current
     speakerDragSrc.current = null
     setSpeakerDragOver(null)
-    if (!src || src.index === toIndex) return
+    if (!src || src.itemId !== itemId || src.index === toIndex) return
     setAgendaItems(prev => prev.map(item => {
       if (item.id !== src.itemId) return item
       const next = [...item.speakers]
@@ -587,10 +588,10 @@ export function MeetingDetailPage() {
                           <div
                             key={s.id}
                             draggable
-                            onDragStart={() => handleSpeakerDragStart(item.id, si)}
-                            onDragOver={(e) => handleSpeakerDragOver(e, item.id, si)}
-                            onDrop={() => handleSpeakerDrop(si)}
-                            onDragEnd={handleSpeakerDragEnd}
+                            onDragStart={e => { e.stopPropagation(); handleSpeakerDragStart(item.id, si) }}
+                            onDragOver={e => { e.stopPropagation(); handleSpeakerDragOver(e, item.id, si) }}
+                            onDrop={e => { e.stopPropagation(); handleSpeakerDrop(item.id, si) }}
+                            onDragEnd={e => { e.stopPropagation(); handleSpeakerDragEnd() }}
                             className={[
                               'flex items-center gap-1.5 text-xs text-gray-500 rounded px-1 py-0.5 transition-colors cursor-grab active:cursor-grabbing',
                               speakerDragOver?.itemId === item.id && speakerDragOver?.index === si

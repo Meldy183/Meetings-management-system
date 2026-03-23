@@ -156,8 +156,18 @@ export function CreateMeetingPage() {
   async function handleSort() {
     if (state.people.length === 0) return
     try {
-      const sortedIds = await sortPeople(state.people.map(p => p.id))
-      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
+      if (state.chairperson_id !== null) {
+        // Chairperson is pinned at top — sort only the others
+        const chair = state.people.find(p => p.id === state.chairperson_id)
+        const others = state.people.filter(p => p.id !== state.chairperson_id)
+        if (others.length === 0) return
+        const sortedIds = await sortPeople(others.map(p => p.id))
+        const sortedOthers = sortedIds.map(id => others.find(p => p.id === id)!)
+        dispatch({ type: 'REORDER_PEOPLE', people: [...(chair ? [chair] : []), ...sortedOthers] })
+      } else {
+        const sortedIds = await sortPeople(state.people.map(p => p.id))
+        dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
+      }
     } catch { /* ignore */ }
   }
 
