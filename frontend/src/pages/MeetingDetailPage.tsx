@@ -46,7 +46,6 @@ export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  const [downloading, setDownloading] = useState<'agenda' | 'participants' | null>(null)
 
   // DnD local state
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
@@ -226,19 +225,14 @@ export function MeetingDetailPage() {
     return iso.slice(0, 16)
   }
 
-  async function handleDownload(type: 'agenda' | 'participants') {
-    if (!id) return
-    setDownloading(type)
-    try {
-      if (type === 'agenda') await downloadAgenda(id)
-      else await downloadParticipants(id)
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) {
-        alert('Совещание не готово к экспорту: назначьте председателя, добавьте участников и повестку')
-      }
-    } finally {
-      setDownloading(null)
+  function handleDownload(type: 'agenda' | 'participants') {
+    if (!id || !meeting) return
+    if (meeting.status !== 'complete') {
+      alert('Совещание не готово к экспорту: назначьте председателя, добавьте участников и повестку')
+      return
     }
+    if (type === 'agenda') downloadAgenda(id)
+    else downloadParticipants(id)
   }
 
   if (isLoading) return <div className="max-w-2xl mx-auto px-4 py-6 text-gray-500 text-sm">Загрузка...</div>
@@ -643,17 +637,15 @@ export function MeetingDetailPage() {
       <div className="flex gap-3 pt-2">
         <button
           onClick={() => handleDownload('agenda')}
-          disabled={downloading === 'agenda'}
-          className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg text-sm font-medium hover:bg-gray-50"
         >
-          {downloading === 'agenda' ? 'Загрузка...' : '↓ Повестка (.docx)'}
+          ↓ Повестка (.docx)
         </button>
         <button
           onClick={() => handleDownload('participants')}
-          disabled={downloading === 'participants'}
-          className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          className="flex-1 bg-white border border-gray-300 text-gray-700 px-4 py-3 rounded-lg text-sm font-medium hover:bg-gray-50"
         >
-          {downloading === 'participants' ? 'Загрузка...' : '↓ Список участников (.docx)'}
+          ↓ Список участников (.docx)
         </button>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import { apiFetch, apiFetchBlob } from './client'
+import { apiFetch, BASE_URL } from './client'
 import type { Meeting, MeetingCreate, MeetingList } from './types'
 
 export function getMeetings(limit = 20, offset = 0): Promise<MeetingList> {
@@ -83,23 +83,10 @@ export function reorderAgendaItemSpeakers(meetingId: string, itemId: number, per
   })
 }
 
-export async function downloadAgenda(id: string): Promise<void> {
-  const { blob, filename } = await apiFetchBlob(`/meetings/${id}/export/agenda`)
-  triggerDownload(blob, filename)
+export function downloadAgenda(id: string): void {
+  window.location.href = `${BASE_URL}/meetings/${id}/export/agenda`
 }
 
-export async function downloadParticipants(id: string): Promise<void> {
-  const { blob, filename } = await apiFetchBlob(`/meetings/${id}/export/participants`)
-  triggerDownload(blob, filename)
-}
-
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
+export function downloadParticipants(id: string): void {
+  window.location.href = `${BASE_URL}/meetings/${id}/export/participants`
 }
