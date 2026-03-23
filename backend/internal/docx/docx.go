@@ -24,24 +24,24 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 24)))
+	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
 	chairName := ""
 	if m.Chairperson != nil {
 		chairName = fullName(*m.Chairperson)
 	}
-	body.WriteString(para(pPrCenter() + tnr(chairName, 28)))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
+	body.WriteString(para(pPrCenter() + tnr(chairName, 24)))
+	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
 
 	// Agenda items
 	for i, item := range m.AgendaItems {
 		roman := toRoman(i + 1)
-		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 27)))
+		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 24)))
 		label := "Докладчик:"
 		if len(item.Speakers) > 1 {
 			label = "Докладчики:"
 		}
-		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 27)))
+		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 24)))
 		for _, spk := range item.Speakers {
 			body.WriteString(agendaTable(spk))
 		}
@@ -57,14 +57,14 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК УЧАСТНИКОВ", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
+	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 24)))
+	body.WriteString(para(pPrCenter() + tnr("под председательством", 24)))
 	pChairName := ""
 	if m.Chairperson != nil {
 		pChairName = fullName(*m.Chairperson)
 	}
-	body.WriteString(para(pPrCenter() + tnr(pChairName, 28)))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
+	body.WriteString(para(pPrCenter() + tnr(pChairName, 24)))
+	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 24)))
 	body.WriteString(para(pPrLeft())) // blank line before table
 	body.WriteString(participantsTable(m.People))
 
@@ -142,7 +142,7 @@ func tnrCellNameSplit(p person.Person, size int) string {
 func agendaTable(sp person.Person) string {
 	// Column widths (dxa): name=4000, dash=300, info=5054. Total≈9354 (A4 text width).
 	name := strings.ToUpper(sp.LastName) + "\n" + strings.TrimSpace(sp.FirstName+" "+sp.MiddleName)
-	nameRProps := `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>`
+	nameRProps := `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>`
 	nameParts := strings.SplitN(name, "\n", 2)
 	nameCell := fmt.Sprintf(
 		`<w:p>%s<w:r>%s<w:t>%s</w:t></w:r><w:r>%s<w:br/><w:t>%s</w:t></w:r></w:p>`,
@@ -167,7 +167,7 @@ func agendaTable(sp person.Person) string {
     <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/></w:tcPr>%s</w:tc>
   </w:tr>
-</w:tbl>`, nameCell, tnrCell("–", 28), tnrCell(sp.Info, 28))
+</w:tbl>`, nameCell, tnrCell("–", 24), tnrCell(sp.Info, 24))
 }
 
 // participantsTable renders a borderless 4-column table: № | name | "–" | info.
@@ -195,10 +195,10 @@ func participantsTable(participants []person.Person) string {
     <w:tc><w:tcPr><w:tcW w:w="323" w:type="dxa"/></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="4723" w:type="dxa"/></w:tcPr>%s</w:tc>
   </w:tr>`,
-			tnrCell(fmt.Sprintf("%d.", i+1), 28),
-			tnrCellNameSplit(p, 28),
-			tnrCell("–", 28),
-			tnrCell(p.Info, 28),
+			tnrCell(fmt.Sprintf("%d.", i+1), 24),
+			tnrCellNameSplit(p, 24),
+			tnrCell("–", 24),
+			tnrCell(p.Info, 24),
 		))
 	}
 
