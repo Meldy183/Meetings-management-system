@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Accept at build time; empty string = same-origin (nginx proxies)
-ARG VITE_API_URL=""
+ARG VITE_API_URL="/api"
 ENV VITE_API_URL=$VITE_API_URL
 
 COPY package.json package-lock.json ./

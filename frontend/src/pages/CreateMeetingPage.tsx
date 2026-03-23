@@ -84,9 +84,14 @@ export function CreateMeetingPage() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [editingPersonId, setEditingPersonId] = useState<number | null>(null)
   const [titleInput, setTitleInput] = useState('Совещание по вопросам ')
-  const [dateInput, setDateInput] = useState('')
+  const [dateInput, setDateInput] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
+  })
   const [timeInput, setTimeInput] = useState('10:00')
   const [placeInput, setPlaceInput] = useState('')
+  const [isSorted, setIsSorted] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -132,6 +137,33 @@ export function CreateMeetingPage() {
 
   function fullName(p: Person) {
     return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
+  }
+
+  function displayPeople(people: Person[]) {
+    if (!isSorted) return people
+    return [...people].sort((a, b) => {
+      const l = a.last_name.localeCompare(b.last_name, 'ru')
+      if (l !== 0) return l
+      const f = a.first_name.localeCompare(b.first_name, 'ru')
+      if (f !== 0) return f
+      return (a.middle_name ?? '').localeCompare(b.middle_name ?? '', 'ru')
+    })
+  }
+
+  function SortButton() {
+    return (
+      <button
+        onClick={() => setIsSorted(s => !s)}
+        title={isSorted ? 'Сортировка А-Я (нажмите для отмены)' : 'Порядок добавления (нажмите для сортировки)'}
+        className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+          isSorted
+            ? 'border-green-500 text-green-700 bg-green-50 hover:bg-green-100'
+            : 'border-gray-300 text-gray-400 bg-white hover:bg-gray-50'
+        }`}
+      >
+        {isSorted ? 'Сортировано' : 'Сортировать'}
+      </button>
+    )
   }
 
   const canProceedStep1 = titleInput.trim() && dateInput && timeInput
@@ -214,11 +246,14 @@ export function CreateMeetingPage() {
 
           {state.people.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                Список участников ({state.people.length})
-              </p>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-sm font-medium text-gray-700">
+                  Список участников ({state.people.length})
+                </p>
+                <SortButton />
+              </div>
               <div className="space-y-2">
-                {state.people.map(p => (
+                {displayPeople(state.people).map(p => (
                   <div key={p.id}>
                     {editingPersonId === p.id ? (
                       <div className="p-4 border rounded-lg bg-gray-50">
@@ -378,8 +413,11 @@ export function CreateMeetingPage() {
               </p>
             </div>
             <div className="py-3">
-              <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
-              {state.people.map(p => (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Участники ({state.people.length})</p>
+                <SortButton />
+              </div>
+              {displayPeople(state.people).map(p => (
                 <p key={p.id} className="text-sm mt-0.5">{fullName(p)}</p>
               ))}
             </div>
@@ -390,11 +428,13 @@ export function CreateMeetingPage() {
                   .map(id => state.people.find(p => p.id === id))
                   .filter(Boolean)
                   .map(p => fullName(p!))
-                  .join(', ')
                 return (
-                  <p key={i} className="text-sm mt-0.5">
-                    {i + 1}. {item.text}{speakers ? ` — ${speakers}` : ''}
-                  </p>
+                  <div key={i} className="mt-1.5">
+                    <p className="text-sm">{i + 1}. {item.text}</p>
+                    {speakers.map((name, j) => (
+                      <p key={j} className="text-sm text-gray-500 pl-4">{name}</p>
+                    ))}
+                  </div>
                 )
               })}
             </div>

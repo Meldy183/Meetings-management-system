@@ -104,6 +104,11 @@ func pPrCenterSpaced() string {
 	return `<w:pPr><w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>`
 }
 
+// pPrLeftSpaced returns left-aligned paragraph properties with 120-twip spacing before.
+func pPrLeftSpaced() string {
+	return `<w:pPr><w:spacing w:before="120" w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`
+}
+
 // tnr produces a Times New Roman run at the given half-point size.
 func tnr(s string, size int) string {
 	return fmt.Sprintf(
@@ -134,7 +139,7 @@ func tnrCell(s string, size int) string {
 }
 
 // tnrCellNameSplit renders LASTNAME on line 1 and "Firstname Patronymic" on line 2
-// inside a single paragraph using a line break.
+// inside a single paragraph using a line break. Includes spacing before for participant rows.
 func tnrCellNameSplit(p person.Person, size int) string {
 	lastName := strings.ToUpper(p.LastName)
 	firstMid := strings.TrimSpace(p.FirstName + " " + p.MiddleName)
@@ -175,9 +180,9 @@ func agendaTable(sp person.Person) string {
     </w:tblBorders>
   </w:tblPr>
   <w:tr>
-    <w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
   </w:tr>
 </w:tbl>`, nameCell, tnrCell("–", 28), tnrCell(sp.Info, 28))
 }
@@ -200,17 +205,20 @@ func participantsTable(participants []person.Person) string {
   </w:tblPr>`)
 
 	for i, p := range participants {
+		numCell := `<w:p>` + pPrLeft() + tnr(fmt.Sprintf("%d.", i+1), 28) + `</w:p>`
+		dashCell := `<w:p>` + pPrLeft() + tnr("-", 28) + `</w:p>`
+		infoCell := `<w:p>` + pPrLeft() + tnr(p.Info, 28) + `</w:p>`
 		sb.WriteString(fmt.Sprintf(`
   <w:tr>
-    <w:tc><w:tcPr><w:tcW w:w="566" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="3742" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="323" w:type="dxa"/></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="5179" w:type="dxa"/></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="566" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="3742" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="323" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="5179" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
   </w:tr>`,
-			tnrCell(fmt.Sprintf("%d.", i+1), 28),
+			numCell,
 			tnrCellNameSplit(p, 27),
-			tnrCell("-", 28),
-			tnrCell(p.Info, 28),
+			dashCell,
+			infoCell,
 		))
 	}
 
