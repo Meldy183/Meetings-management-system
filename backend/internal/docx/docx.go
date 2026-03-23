@@ -36,12 +36,12 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	// Agenda items
 	for i, item := range m.AgendaItems {
 		roman := toRoman(i + 1)
-		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 24)))
+		body.WriteString(para(pPrLeft() + tnrBold(roman+". "+item.Text, 28)))
 		label := "Докладчик:"
 		if len(item.Speakers) > 1 {
 			label = "Докладчики:"
 		}
-		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 24)))
+		body.WriteString(para(pPrCenter() + tnrBoldUnderline(label, 28)))
 		for _, spk := range item.Speakers {
 			body.WriteString(agendaTable(spk))
 		}
@@ -142,7 +142,7 @@ func tnrCellNameSplit(p person.Person, size int) string {
 func agendaTable(sp person.Person) string {
 	// Column widths (dxa): name=4000, dash=300, info=5054. Total≈9354 (A4 text width).
 	name := strings.ToUpper(sp.LastName) + "\n" + strings.TrimSpace(sp.FirstName+" "+sp.MiddleName)
-	nameRProps := `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>`
+	nameRProps := `<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>`
 	nameParts := strings.SplitN(name, "\n", 2)
 	nameCell := fmt.Sprintf(
 		`<w:p>%s<w:r>%s<w:t>%s</w:t></w:r><w:r>%s<w:br/><w:t>%s</w:t></w:r></w:p>`,
@@ -167,7 +167,7 @@ func agendaTable(sp person.Person) string {
     <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/></w:tcPr>%s</w:tc>
   </w:tr>
-</w:tbl>`, nameCell, tnrCell("–", 24), tnrCell(sp.Info, 24))
+</w:tbl>`, nameCell, tnrCell("–", 28), tnrCell(sp.Info, 28))
 }
 
 // participantsTable renders a borderless 4-column table: № | name | "–" | info.
