@@ -1,570 +1,605 @@
 package main
 
 import (
-	"bufio"
-	"context"
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"time"
-	"unicode"
 )
 
-type repl struct {
-	client *Client
+// ==================== Argument structs (strict validation) ====================
+
+// --- People ---
+
+type ListPeopleArgs struct {
+	Q string `json:"q,omitempty"`
 }
+
+type CreatePersonArgs struct {
+	LastName   string  `json:"last_name"`
+	FirstName  string  `json:"first_name"`
+	MiddleName *string `json:"middle_name,omitempty"`
+	Info       *string `json:"info,omitempty"`
+}
+
+type GetPersonArgs struct {
+	ID int `json:"id"`
+}
+
+type UpdatePersonArgs struct {
+	ID         int     `json:"id"`
+	LastName   string  `json:"last_name"`
+	FirstName  string  `json:"first_name"`
+	MiddleName *string `json:"middle_name,omitempty"`
+	Info       *string `json:"info,omitempty"`
+}
+
+type DeletePersonArgs struct {
+	ID int `json:"id"`
+}
+
+type SortPeopleArgs struct {
+	IDs []int `json:"ids"`
+}
+
+// --- Meetings ---
+
+type ListMeetingsArgs struct {
+	Limit  int `json:"limit,omitempty"`
+	Offset int `json:"offset,omitempty"`
+}
+
+type CreateMeetingArgs struct {
+	Title string  `json:"title"`
+	Date  string  `json:"date"`
+	Place *string `json:"place,omitempty"`
+}
+
+type GetMeetingArgs struct {
+	ID string `json:"id"`
+}
+
+type UpdateMeetingArgs struct {
+	ID    string  `json:"id"`
+	Title string  `json:"title"`
+	Date  string  `json:"date"`
+	Place *string `json:"place,omitempty"`
+}
+
+type DeleteMeetingArgs struct {
+	ID string `json:"id"`
+}
+
+type GetMeetingMetaArgs struct {
+	ID string `json:"id"`
+}
+
+// --- Meeting People ---
+
+type ListMeetingPeopleArgs struct {
+	MeetingID string `json:"meeting_id"`
+}
+
+type AddMeetingPersonArgs struct {
+	MeetingID string `json:"meeting_id"`
+	PersonID  int    `json:"person_id"`
+}
+
+type RemoveMeetingPersonArgs struct {
+	MeetingID string `json:"meeting_id"`
+	PersonID  int    `json:"person_id"`
+}
+
+type OrderMeetingPeopleArgs struct {
+	MeetingID string `json:"meeting_id"`
+	PersonIDs []int  `json:"person_ids"`
+}
+
+// --- Chairperson ---
+
+type SetChairpersonArgs struct {
+	MeetingID string `json:"meeting_id"`
+	PersonID  int    `json:"person_id"`
+}
+
+// --- Agenda Items ---
+
+type ListAgendaItemsArgs struct {
+	MeetingID string `json:"meeting_id"`
+}
+
+type AddAgendaItemArgs struct {
+	MeetingID  string `json:"meeting_id"`
+	Text       string `json:"text"`
+	SpeakerIDs []int  `json:"speaker_ids"`
+}
+
+type UpdateAgendaItemArgs struct {
+	MeetingID  string `json:"meeting_id"`
+	ItemID     int    `json:"item_id"`
+	Text       string `json:"text"`
+	SpeakerIDs []int  `json:"speaker_ids"`
+}
+
+type DeleteAgendaItemArgs struct {
+	MeetingID string `json:"meeting_id"`
+	ItemID    int    `json:"item_id"`
+}
+
+type OrderAgendaItemsArgs struct {
+	MeetingID     string `json:"meeting_id"`
+	AgendaItemIDs []int  `json:"agenda_item_ids"`
+}
+
+// --- Agenda Item Speakers ---
+
+type AddSpeakerArgs struct {
+	MeetingID string `json:"meeting_id"`
+	ItemID    int    `json:"item_id"`
+	PersonID  int    `json:"person_id"`
+}
+
+type RemoveSpeakerArgs struct {
+	MeetingID string `json:"meeting_id"`
+	ItemID    int    `json:"item_id"`
+	PersonID  int    `json:"person_id"`
+}
+
+type OrderSpeakersArgs struct {
+	MeetingID string `json:"meeting_id"`
+	ItemID    int    `json:"item_id"`
+	PersonIDs []int  `json:"person_ids"`
+}
+
+// --- Export ---
+
+type ExportArgs struct {
+	MeetingID string `json:"meeting_id"`
+}
+
+// ==================== Main ====================
 
 func main() {
-	backendURL := os.Getenv("BACKEND_URL")
-	if backendURL == "" {
-		backendURL = "http://localhost:8080"
+	if len(os.Args) < 2 {
+		printUsage()
+		os.Exit(1)
 	}
 
-	r := &repl{client: newClient(backendURL)}
+	command := os.Args[1]
 
-	fmt.Printf("Meetings console — backend: %s\nType 'help' for commands.\n\n", backendURL)
-
-	scanner := bufio.NewScanner(os.Stdin)
-	for {
-		fmt.Print("> ")
-		if !scanner.Scan() {
-			break
-		}
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-		if err := r.dispatch(context.Background(), line); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		}
+	// Some commands (like list_people with no query) may not need a payload
+	payloadStr := "{}"
+	if len(os.Args) >= 3 {
+		payloadStr = os.Args[2]
 	}
-}
 
-// tokenize splits a line into tokens, respecting single and double quoted strings.
-func tokenize(s string) []string {
-	var tokens []string
-	var current strings.Builder
-	inQuote := false
-	var quoteChar rune
-
-	for _, ch := range s {
-		switch {
-		case inQuote:
-			if ch == quoteChar {
-				inQuote = false
-			} else {
-				current.WriteRune(ch)
-			}
-		case ch == '"' || ch == '\'':
-			inQuote = true
-			quoteChar = ch
-		case unicode.IsSpace(ch):
-			if current.Len() > 0 {
-				tokens = append(tokens, current.String())
-				current.Reset()
-			}
-		default:
-			current.WriteRune(ch)
-		}
+	baseURL := os.Getenv("MEETING_API_BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8081"
 	}
-	if current.Len() > 0 {
-		tokens = append(tokens, current.String())
-	}
-	return tokens
-}
 
-func printJSON(v interface{}) {
-	b, _ := json.MarshalIndent(v, "", "  ")
-	fmt.Println(string(b))
-}
+	token := os.Getenv("MEETING_API_TOKEN")
+	client := &http.Client{Timeout: 60 * time.Second}
 
-func parseInt(s string) (int, error) {
-	n, err := strconv.Atoi(s)
-	if err != nil {
-		return 0, fmt.Errorf("expected integer, got %q", s)
-	}
-	return n, nil
-}
+	switch command {
 
-func parseIDs(s string) ([]int, error) {
-	parts := strings.Split(s, ",")
-	ids := make([]int, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		n, err := parseInt(p)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, n)
-	}
-	return ids, nil
-}
+	// ── People ──────────────────────────────────────────────
 
-func parseDate(s string) (time.Time, error) {
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date %q — use YYYY-MM-DD", s)
-	}
-	return t, nil
-}
+	case "list_people":
+		var args ListPeopleArgs
+		if err := json.Unmarshal([]byte(payloadStr), &args); err != nil {
+			fatalf("JSON parse error: %v\n", err)
+		}
+		url := baseURL + "/people"
+		if args.Q != "" {
+			url += "?q=" + args.Q
+		}
+		doHTTP(client, http.MethodGet, url, nil, token)
 
-// optStr returns nil for "-", otherwise returns a pointer to s.
-func optStr(s string) *string {
-	if s == "-" {
-		return nil
-	}
-	return &s
-}
+	case "create_person":
+		var args CreatePersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.LastName == "" || args.FirstName == "" {
+			fatalf("Validation error: last_name and first_name are required\n")
+		}
+		body, _ := json.Marshal(args)
+		doHTTP(client, http.MethodPost, baseURL+"/people", body, token)
 
+	case "get_person":
+		var args GetPersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID <= 0 {
+			fatalf("Validation error: id must be > 0\n")
+		}
+		url := fmt.Sprintf("%s/people/%d", baseURL, args.ID)
+		doHTTP(client, http.MethodGet, url, nil, token)
 
-func (r *repl) dispatch(ctx context.Context, line string) error {
-	tokens := tokenize(line)
-	if len(tokens) == 0 {
-		return nil
-	}
-	cmd, args := tokens[0], tokens[1:]
+	case "update_person":
+		var args UpdatePersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID <= 0 {
+			fatalf("Validation error: id must be > 0\n")
+		}
+		if args.LastName == "" || args.FirstName == "" {
+			fatalf("Validation error: last_name and first_name are required\n")
+		}
+		body, _ := json.Marshal(CreatePersonArgs{
+			LastName:   args.LastName,
+			FirstName:  args.FirstName,
+			MiddleName: args.MiddleName,
+			Info:       args.Info,
+		})
+		url := fmt.Sprintf("%s/people/%d", baseURL, args.ID)
+		doHTTP(client, http.MethodPatch, url, body, token)
 
-	switch cmd {
+	case "delete_person":
+		var args DeletePersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID <= 0 {
+			fatalf("Validation error: id must be > 0\n")
+		}
+		url := fmt.Sprintf("%s/people/%d", baseURL, args.ID)
+		doHTTP(client, http.MethodDelete, url, nil, token)
 
-	case "help":
-		printHelp()
+	case "sort_people":
+		var args SortPeopleArgs
+		mustUnmarshal(payloadStr, &args)
+		if len(args.IDs) == 0 {
+			fatalf("Validation error: ids must contain at least one ID\n")
+		}
+		body, _ := json.Marshal(args)
+		doHTTP(client, http.MethodPost, baseURL+"/people/sort", body, token)
 
-	case "quit", "exit":
-		fmt.Println("bye")
-		os.Exit(0)
+	// ── Meetings ────────────────────────────────────────────
 
-	// ── People ──────────────────────────────────────────────────────────────
+	case "list_meetings":
+		var args ListMeetingsArgs
+		if err := json.Unmarshal([]byte(payloadStr), &args); err != nil {
+			fatalf("JSON parse error: %v\n", err)
+		}
+		if args.Limit == 0 {
+			args.Limit = 20
+		}
+		url := fmt.Sprintf("%s/meetings?limit=%d&offset=%d", baseURL, args.Limit, args.Offset)
+		doHTTP(client, http.MethodGet, url, nil, token)
 
-	case "list-people":
-		q := strings.Join(args, " ")
-		people, err := r.client.ListPeople(ctx, q)
-		if err != nil {
-			return err
+	case "create_meeting":
+		var args CreateMeetingArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.Title == "" || args.Date == "" {
+			fatalf("Validation error: title and date are required\n")
 		}
-		printJSON(people)
+		body, _ := json.Marshal(args)
+		doHTTP(client, http.MethodPost, baseURL+"/meetings", body, token)
 
-	case "get-person":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: get-person <id>")
+	case "get_meeting":
+		var args GetMeetingArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID == "" {
+			fatalf("Validation error: id is required\n")
 		}
-		id, err := parseInt(args[0])
-		if err != nil {
-			return err
-		}
-		p, err := r.client.GetPerson(ctx, id)
-		if err != nil {
-			return err
-		}
-		printJSON(p)
+		doHTTP(client, http.MethodGet, baseURL+"/meetings/"+args.ID, nil, token)
 
-	case "create-person":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: create-person <last_name> <first_name> [middle_name|-] [info|-]")
+	case "update_meeting":
+		var args UpdateMeetingArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID == "" || args.Title == "" || args.Date == "" {
+			fatalf("Validation error: id, title, and date are required\n")
 		}
-		req := PersonCreateRequest{LastName: args[0], FirstName: args[1]}
-		if len(args) >= 3 {
-			req.MiddleName = optStr(args[2])
-		}
-		if len(args) >= 4 {
-			req.Info = optStr(args[3])
-		}
-		p, err := r.client.CreatePerson(ctx, req)
-		if err != nil {
-			return err
-		}
-		printJSON(p)
+		body, _ := json.Marshal(struct {
+			Title string  `json:"title"`
+			Date  string  `json:"date"`
+			Place *string `json:"place,omitempty"`
+		}{args.Title, args.Date, args.Place})
+		doHTTP(client, http.MethodPatch, baseURL+"/meetings/"+args.ID, body, token)
 
-	case "update-person":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: update-person <id> <last_name> <first_name> [middle_name|-] [info|-]")
+	case "delete_meeting":
+		var args DeleteMeetingArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID == "" {
+			fatalf("Validation error: id is required\n")
 		}
-		id, err := parseInt(args[0])
-		if err != nil {
-			return err
-		}
-		req := PersonCreateRequest{LastName: args[1], FirstName: args[2]}
-		if len(args) >= 4 {
-			req.MiddleName = optStr(args[3])
-		}
-		if len(args) >= 5 {
-			req.Info = optStr(args[4])
-		}
-		p, err := r.client.UpdatePerson(ctx, id, req)
-		if err != nil {
-			return err
-		}
-		printJSON(p)
+		doHTTP(client, http.MethodDelete, baseURL+"/meetings/"+args.ID, nil, token)
 
-	case "sort-people":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: sort-people <id1,id2,...>")
+	case "get_meeting_meta":
+		var args GetMeetingMetaArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.ID == "" {
+			fatalf("Validation error: id is required\n")
 		}
-		ids, err := parseIDs(args[0])
-		if err != nil {
-			return err
-		}
-		sorted, err := r.client.SortPeople(ctx, ids)
-		if err != nil {
-			return err
-		}
-		printJSON(sorted)
+		doHTTP(client, http.MethodGet, baseURL+"/meetings/"+args.ID+"/meta", nil, token)
 
-	// ── Meetings ─────────────────────────────────────────────────────────────
+	// ── Meeting People ──────────────────────────────────────
 
-	case "list-meetings":
-		limit, offset := 20, 0
-		if len(args) >= 1 {
-			n, err := parseInt(args[0])
-			if err != nil {
-				return err
-			}
-			limit = n
+	case "list_meeting_people":
+		var args ListMeetingPeopleArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" {
+			fatalf("Validation error: meeting_id is required\n")
 		}
-		if len(args) >= 2 {
-			n, err := parseInt(args[1])
-			if err != nil {
-				return err
-			}
-			offset = n
-		}
-		list, err := r.client.ListMeetings(ctx, limit, offset)
-		if err != nil {
-			return err
-		}
-		printJSON(list)
+		doHTTP(client, http.MethodGet, baseURL+"/meetings/"+args.MeetingID+"/people", nil, token)
 
-	case "create-meeting":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: create-meeting <title> <date YYYY-MM-DD> [place|-]")
+	case "add_meeting_person":
+		var args AddMeetingPersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id and person_id (> 0) are required\n")
 		}
-		date, err := parseDate(args[1])
-		if err != nil {
-			return err
-		}
-		place := ""
-		if len(args) >= 3 {
-			if args[2] != "-" {
-				place = args[2]
-			}
-		}
-		m, err := r.client.CreateMeeting(ctx, args[0], date, place)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		body, _ := json.Marshal(map[string]int{"person_id": args.PersonID})
+		doHTTP(client, http.MethodPost, baseURL+"/meetings/"+args.MeetingID+"/people", body, token)
 
-	case "get-meeting":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: get-meeting <id>")
+	case "remove_meeting_person":
+		var args RemoveMeetingPersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id and person_id (> 0) are required\n")
 		}
-		m, err := r.client.GetMeeting(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		url := fmt.Sprintf("%s/meetings/%s/people/%d", baseURL, args.MeetingID, args.PersonID)
+		doHTTP(client, http.MethodDelete, url, nil, token)
 
-	case "get-meeting-meta":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: get-meeting-meta <id>")
+	case "order_meeting_people":
+		var args OrderMeetingPeopleArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || len(args.PersonIDs) == 0 {
+			fatalf("Validation error: meeting_id and person_ids (non-empty) are required\n")
 		}
-		m, err := r.client.GetMeetingMeta(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		body, _ := json.Marshal(map[string][]int{"person_ids": args.PersonIDs})
+		doHTTP(client, http.MethodPut, baseURL+"/meetings/"+args.MeetingID+"/people/order", body, token)
 
-	case "get-meeting-people":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: get-meeting-people <id>")
-		}
-		people, err := r.client.GetMeetingPeople(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		printJSON(people)
+	// ── Chairperson ─────────────────────────────────────────
 
-	case "get-meeting-agenda":
-		if len(args) < 1 {
-			return fmt.Errorf("usage: get-meeting-agenda <id>")
+	case "set_chairperson":
+		var args SetChairpersonArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id and person_id (> 0) are required\n")
 		}
-		items, err := r.client.GetMeetingAgendaItems(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		printJSON(items)
+		body, _ := json.Marshal(map[string]int{"person_id": args.PersonID})
+		doHTTP(client, http.MethodPut, baseURL+"/meetings/"+args.MeetingID+"/chairperson", body, token)
 
-	case "update-meeting":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: update-meeting <id> <title> <date YYYY-MM-DD> [place|-]")
-		}
-		date, err := parseDate(args[2])
-		if err != nil {
-			return err
-		}
-		place := ""
-		if len(args) >= 4 {
-			if args[3] != "-" {
-				place = args[3]
-			}
-		}
-		m, err := r.client.UpdateMeeting(ctx, args[0], MeetingUpdateRequest{Title: args[1], Date: date, Place: place})
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+	// ── Agenda Items ────────────────────────────────────────
 
-	case "set-chairperson":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: set-chairperson <meeting_id> <person_id>")
+	case "list_agenda_items":
+		var args ListAgendaItemsArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" {
+			fatalf("Validation error: meeting_id is required\n")
 		}
-		personID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.SetChairperson(ctx, args[0], personID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		doHTTP(client, http.MethodGet, baseURL+"/meetings/"+args.MeetingID+"/agenda-items", nil, token)
 
-	case "add-person":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: add-person <meeting_id> <person_id>")
+	case "add_agenda_item":
+		var args AddAgendaItemArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.Text == "" || len(args.SpeakerIDs) == 0 {
+			fatalf("Validation error: meeting_id, text, and speaker_ids (non-empty) are required\n")
 		}
-		personID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.AddPersonToMeeting(ctx, args[0], personID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		body, _ := json.Marshal(struct {
+			Text       string `json:"text"`
+			SpeakerIDs []int  `json:"speaker_ids"`
+		}{args.Text, args.SpeakerIDs})
+		doHTTP(client, http.MethodPost, baseURL+"/meetings/"+args.MeetingID+"/agenda-items", body, token)
 
-	case "remove-person":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: remove-person <meeting_id> <person_id>")
+	case "update_agenda_item":
+		var args UpdateAgendaItemArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.ItemID <= 0 || args.Text == "" || len(args.SpeakerIDs) == 0 {
+			fatalf("Validation error: meeting_id, item_id (> 0), text, and speaker_ids are required\n")
 		}
-		personID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.RemovePersonFromMeeting(ctx, args[0], personID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		body, _ := json.Marshal(struct {
+			Text       string `json:"text"`
+			SpeakerIDs []int  `json:"speaker_ids"`
+		}{args.Text, args.SpeakerIDs})
+		url := fmt.Sprintf("%s/meetings/%s/agenda-items/%d", baseURL, args.MeetingID, args.ItemID)
+		doHTTP(client, http.MethodPut, url, body, token)
 
-	case "reorder-people":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: reorder-people <meeting_id> <id1,id2,...>")
+	case "delete_agenda_item":
+		var args DeleteAgendaItemArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.ItemID <= 0 {
+			fatalf("Validation error: meeting_id and item_id (> 0) are required\n")
 		}
-		ids, err := parseIDs(args[1])
-		if err != nil {
-			return err
-		}
-		if err := r.client.ReorderMeetingPeople(ctx, args[0], ids); err != nil {
-			return err
-		}
-		fmt.Println("ok")
+		url := fmt.Sprintf("%s/meetings/%s/agenda-items/%d", baseURL, args.MeetingID, args.ItemID)
+		doHTTP(client, http.MethodDelete, url, nil, token)
 
-	// ── Agenda items ──────────────────────────────────────────────────────────
+	case "order_agenda_items":
+		var args OrderAgendaItemsArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || len(args.AgendaItemIDs) == 0 {
+			fatalf("Validation error: meeting_id and agenda_item_ids (non-empty) are required\n")
+		}
+		body, _ := json.Marshal(map[string][]int{"agenda_item_ids": args.AgendaItemIDs})
+		doHTTP(client, http.MethodPut, baseURL+"/meetings/"+args.MeetingID+"/agenda-items/order", body, token)
 
-	case "add-agenda-item":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: add-agenda-item <meeting_id> <text> <speaker_id1,speaker_id2,...>")
-		}
-		speakerIDs, err := parseIDs(args[2])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.AddAgendaItem(ctx, args[0], args[1], speakerIDs)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+	// ── Agenda Item Speakers ────────────────────────────────
 
-	case "update-agenda-item":
-		if len(args) < 4 {
-			return fmt.Errorf("usage: update-agenda-item <meeting_id> <item_id> <text> <speaker_id1,...>")
+	case "add_speaker":
+		var args AddSpeakerArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.ItemID <= 0 || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id, item_id (> 0), and person_id (> 0) are required\n")
 		}
-		itemID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		speakerIDs, err := parseIDs(args[3])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.UpdateAgendaItem(ctx, args[0], itemID, args[2], speakerIDs)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		body, _ := json.Marshal(map[string]int{"person_id": args.PersonID})
+		url := fmt.Sprintf("%s/meetings/%s/agenda-items/%d/speakers", baseURL, args.MeetingID, args.ItemID)
+		doHTTP(client, http.MethodPost, url, body, token)
 
-	case "delete-agenda-item":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: delete-agenda-item <meeting_id> <item_id>")
+	case "remove_speaker":
+		var args RemoveSpeakerArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.ItemID <= 0 || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id, item_id (> 0), and person_id (> 0) are required\n")
 		}
-		itemID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.DeleteAgendaItem(ctx, args[0], itemID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		url := fmt.Sprintf("%s/meetings/%s/agenda-items/%d/speakers/%d",
+			baseURL, args.MeetingID, args.ItemID, args.PersonID)
+		doHTTP(client, http.MethodDelete, url, nil, token)
 
-	case "reorder-agenda-items":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: reorder-agenda-items <meeting_id> <id1,id2,...>")
+	case "order_speakers":
+		var args OrderSpeakersArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.ItemID <= 0 || len(args.PersonIDs) == 0 {
+			fatalf("Validation error: meeting_id, item_id (> 0), and person_ids (non-empty) are required\n")
 		}
-		ids, err := parseIDs(args[1])
-		if err != nil {
-			return err
-		}
-		if err := r.client.ReorderAgendaItems(ctx, args[0], ids); err != nil {
-			return err
-		}
-		fmt.Println("ok")
+		body, _ := json.Marshal(map[string][]int{"person_ids": args.PersonIDs})
+		url := fmt.Sprintf("%s/meetings/%s/agenda-items/%d/speakers/order",
+			baseURL, args.MeetingID, args.ItemID)
+		doHTTP(client, http.MethodPut, url, body, token)
 
-	// ── Speakers ──────────────────────────────────────────────────────────────
+	// ── Export ───────────────────────────────────────────────
 
-	case "add-speaker":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: add-speaker <meeting_id> <item_id> <person_id>")
+	case "export_agenda":
+		var args ExportArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" {
+			fatalf("Validation error: meeting_id is required\n")
 		}
-		itemID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		personID, err := parseInt(args[2])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.AddAgendaItemSpeaker(ctx, args[0], itemID, personID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
+		doDownload(client, baseURL+"/meetings/"+args.MeetingID+"/export/agenda", token,
+			"agenda-"+args.MeetingID+".docx")
 
-	case "remove-speaker":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: remove-speaker <meeting_id> <item_id> <person_id>")
+	case "export_participants":
+		var args ExportArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" {
+			fatalf("Validation error: meeting_id is required\n")
 		}
-		itemID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		personID, err := parseInt(args[2])
-		if err != nil {
-			return err
-		}
-		m, err := r.client.RemoveAgendaItemSpeaker(ctx, args[0], itemID, personID)
-		if err != nil {
-			return err
-		}
-		printJSON(m)
-
-	case "reorder-speakers":
-		if len(args) < 3 {
-			return fmt.Errorf("usage: reorder-speakers <meeting_id> <item_id> <id1,id2,...>")
-		}
-		itemID, err := parseInt(args[1])
-		if err != nil {
-			return err
-		}
-		ids, err := parseIDs(args[2])
-		if err != nil {
-			return err
-		}
-		if err := r.client.ReorderAgendaItemSpeakers(ctx, args[0], itemID, ids); err != nil {
-			return err
-		}
-		fmt.Println("ok")
-
-	// ── Export ────────────────────────────────────────────────────────────────
-
-	case "export-agenda":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: export-agenda <meeting_id> <output_file>")
-		}
-		data, err := r.client.ExportAgenda(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(args[1], data, 0644); err != nil {
-			return fmt.Errorf("write file: %w", err)
-		}
-		fmt.Printf("saved %d bytes → %s\n", len(data), args[1])
-
-	case "export-participants":
-		if len(args) < 2 {
-			return fmt.Errorf("usage: export-participants <meeting_id> <output_file>")
-		}
-		data, err := r.client.ExportParticipants(ctx, args[0])
-		if err != nil {
-			return err
-		}
-		if err := os.WriteFile(args[1], data, 0644); err != nil {
-			return fmt.Errorf("write file: %w", err)
-		}
-		fmt.Printf("saved %d bytes → %s\n", len(data), args[1])
+		doDownload(client, baseURL+"/meetings/"+args.MeetingID+"/export/participants", token,
+			"participants-"+args.MeetingID+".docx")
 
 	default:
-		return fmt.Errorf("unknown command %q — type 'help' for commands", cmd)
+		fmt.Printf("Unknown command: %s\n", command)
+		printUsage()
+		os.Exit(1)
 	}
-	return nil
 }
 
-func printHelp() {
-	fmt.Print(`People:
-  list-people [query]
-  get-person <id>
-  create-person <last_name> <first_name> [middle_name|-] [info|-]
-  update-person <id> <last_name> <first_name> [middle_name|-] [info|-]
-  sort-people <id1,id2,...>
+// ==================== Helpers ====================
 
-Meetings:
-  list-meetings [limit] [offset]
-  create-meeting <title> <date YYYY-MM-DD> [place|-]
-  get-meeting <id>
-  get-meeting-meta <id>
-  get-meeting-people <id>
-  get-meeting-agenda <id>
-  update-meeting <id> <title> <date YYYY-MM-DD> [place|-]
-  set-chairperson <meeting_id> <person_id>
-  add-person <meeting_id> <person_id>
-  remove-person <meeting_id> <person_id>
-  reorder-people <meeting_id> <id1,id2,...>
+func mustUnmarshal(payload string, dst interface{}) {
+	if err := json.Unmarshal([]byte(payload), dst); err != nil {
+		fatalf("JSON parse error: %v\n", err)
+	}
+}
 
-Agenda items:
-  add-agenda-item <meeting_id> <text> <speaker_id1,...>
-  update-agenda-item <meeting_id> <item_id> <text> <speaker_id1,...>
-  delete-agenda-item <meeting_id> <item_id>
-  reorder-agenda-items <meeting_id> <id1,id2,...>
-  add-speaker <meeting_id> <item_id> <person_id>
-  remove-speaker <meeting_id> <item_id> <person_id>
-  reorder-speakers <meeting_id> <item_id> <id1,id2,...>
+func fatalf(format string, args ...interface{}) {
+	fmt.Printf(format, args...)
+	os.Exit(1)
+}
 
-Export:
-  export-agenda <meeting_id> <output_file>
-  export-participants <meeting_id> <output_file>
+func doHTTP(client *http.Client, method, url string, body []byte, token string) {
+	var rdr io.Reader
+	if body != nil {
+		rdr = bytes.NewReader(body)
+	}
 
-Other:
-  help
-  quit | exit
+	req, err := http.NewRequest(method, url, rdr)
+	if err != nil {
+		fatalf("Request creation error: %v\n", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
-Notes:
-  - Quote values with spaces: create-meeting "Board Meeting" 2026-03-22
-  - Use - for empty optional fields: create-person Smith John - "Director"
-  - IDs are comma-separated: 1,2,3
-  - BACKEND_URL env var sets backend (default: http://localhost:8080)
-`)
+	resp, err := client.Do(req)
+	if err != nil {
+		fatalf("Network error: %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	b, _ := io.ReadAll(resp.Body)
+	fmt.Printf("HTTP %d\n%s\n", resp.StatusCode, string(b))
+}
+
+// doDownload saves a binary response (e.g. .docx) to disk.
+func doDownload(client *http.Client, url, token, filename string) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		fatalf("Request creation error: %v\n", err)
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		fatalf("Network error: %v\n", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		fmt.Printf("HTTP %d\n%s\n", resp.StatusCode, string(b))
+		os.Exit(1)
+	}
+
+	out, err := os.Create(filename)
+	if err != nil {
+		fatalf("File creation error: %v\n", err)
+	}
+	defer out.Close()
+
+	n, err := io.Copy(out, resp.Body)
+	if err != nil {
+		fatalf("File write error: %v\n", err)
+	}
+	fmt.Printf("HTTP %d — saved %s (%s bytes)\n", resp.StatusCode, filename, formatBytes(n))
+}
+
+func formatBytes(b int64) string {
+	return strconv.FormatInt(b, 10)
+}
+
+func printUsage() {
+	fmt.Println(`Usage: ./meeting_cli <command> '<json_payload>'
+
+Environment variables:
+  MEETING_API_BASE_URL  (default: http://localhost:8081)
+  MEETING_API_TOKEN     (optional Bearer token)
+
+Commands & example payloads:
+
+  ── People ──
+  list_people           '{"q":"Иванов"}'
+  create_person         '{"last_name":"Иванов","first_name":"Иван","middle_name":"Иванович","info":"Директор"}'
+  get_person            '{"id":42}'
+  update_person         '{"id":42,"last_name":"Иванов","first_name":"Иван","info":"Новая должность"}'
+  delete_person         '{"id":42}'
+  sort_people           '{"ids":[17,5,42]}'
+
+  ── Meetings ──
+  list_meetings         '{"limit":20,"offset":0}'
+  create_meeting        '{"title":"Совещание по ИИ","date":"2026-02-26T11:00:00Z","place":"Москва"}'
+  get_meeting           '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+  update_meeting        '{"id":"<uuid>","title":"Новое название","date":"2026-03-01T10:00:00Z"}'
+  delete_meeting        '{"id":"<uuid>"}'
+  get_meeting_meta      '{"id":"<uuid>"}'
+
+  ── Meeting People ──
+  list_meeting_people   '{"meeting_id":"<uuid>"}'
+  add_meeting_person    '{"meeting_id":"<uuid>","person_id":55}'
+  remove_meeting_person '{"meeting_id":"<uuid>","person_id":55}'
+  order_meeting_people  '{"meeting_id":"<uuid>","person_ids":[17,42]}'
+
+  ── Chairperson ──
+  set_chairperson       '{"meeting_id":"<uuid>","person_id":42}'
+
+  ── Agenda Items ──
+  list_agenda_items     '{"meeting_id":"<uuid>"}'
+  add_agenda_item       '{"meeting_id":"<uuid>","text":"Новый пункт","speaker_ids":[42]}'
+  update_agenda_item    '{"meeting_id":"<uuid>","item_id":1,"text":"Обновлённый текст","speaker_ids":[17,42]}'
+  delete_agenda_item    '{"meeting_id":"<uuid>","item_id":1}'
+  order_agenda_items    '{"meeting_id":"<uuid>","agenda_item_ids":[3,1,2]}'
+
+  ── Agenda Item Speakers ──
+  add_speaker           '{"meeting_id":"<uuid>","item_id":3,"person_id":17}'
+  remove_speaker        '{"meeting_id":"<uuid>","item_id":3,"person_id":17}'
+  order_speakers        '{"meeting_id":"<uuid>","item_id":3,"person_ids":[42,17]}'
+
+  ── Export (downloads .docx) ──
+  export_agenda         '{"meeting_id":"<uuid>"}'
+  export_participants   '{"meeting_id":"<uuid>"}'`)
 }
