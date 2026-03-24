@@ -44,7 +44,7 @@ export function MeetingListPage() {
                   <p className="font-medium text-sm text-gray-900 leading-snug">{meeting.title}</p>
                   {meeting.status === 'incomplete' && (
                     <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                      Не готово
+                      Черновик
                     </span>
                   )}
                 </div>

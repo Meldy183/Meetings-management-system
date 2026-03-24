@@ -251,7 +251,7 @@ export function MeetingDetailPage() {
   function handleDownload(type: 'agenda' | 'participants') {
     if (!id || !meeting) return
     if (meeting.status !== 'complete') {
-      alert('Совещание не готово к экспорту: назначьте председателя, добавьте участников и повестку')
+      alert('Совещание в статусе "черновик": назначьте председателя, добавьте участников и повестку для экспорта')
       return
     }
     if (type === 'agenda') downloadAgenda(id)
@@ -268,16 +268,14 @@ export function MeetingDetailPage() {
       <div className="flex items-start gap-3">
         <Link to="/" className="text-gray-400 hover:text-gray-600 mt-1">←</Link>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold text-gray-900 leading-snug">{meeting.title}</h1>
-            {meeting.status === 'incomplete' && (
-              <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                Не готово
-              </span>
-            )}
-          </div>
+          <h1 className="text-lg font-semibold text-gray-900 leading-snug">{meeting.title}</h1>
         </div>
         <div className="flex gap-2 shrink-0">
+          {meeting.status === 'incomplete' && (
+            <span className="text-xs text-yellow-700 bg-yellow-100 border border-yellow-200 rounded px-2 py-1">
+              Черновик
+            </span>
+          )}
           <button
             onClick={() => {
               setMeetingForm({ title: meeting.title, date: toDatetimeLocal(meeting.date), place: meeting.place ?? '' })
