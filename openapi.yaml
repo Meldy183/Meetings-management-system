@@ -3,21 +3,41 @@ openapi: 3.0.3
 info:
   title: Meeting Bot API
   description: >
-    REST API for the Meetings Editor Telegram Mini App.
+    REST API for the Meetings Management System.
     Provides person lookup, meeting creation, and .docx export.
+    Authentication is not required in the current backend version.
   version: 1.0.0
 
 servers:
+  - url: http://localhost:8081/api
+    description: Docker Compose entrypoint via frontend nginx proxy (host-accessible)
   - url: http://localhost:8080
-    description: Local development
+    description: Direct backend (for local go run, without nginx)
 
 tags:
+  - name: system
+    description: Service endpoints
   - name: people
     description: Person management
   - name: meetings
     description: Meeting management and export
 
 paths:
+  /health:
+    get:
+      tags:
+        - system
+      summary: Health check
+      description: Returns service liveness status.
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: ok
+
   /people:
     get:
       tags:
