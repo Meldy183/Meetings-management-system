@@ -173,7 +173,7 @@ func main() {
 
 	baseURL := os.Getenv("MEETING_API_BASE_URL")
 	if baseURL == "" {
-		baseURL = "http://localhost:8081"
+		baseURL = "http://localhost:8081/api"
 	}
 
 	token := os.Getenv("MEETING_API_TOKEN")
@@ -545,8 +545,8 @@ func printUsage() {
 	fmt.Println(`Usage: ./meeting_cli <command> '<json_payload>'
 
 Environment variables:
-  MEETING_API_BASE_URL  (default: http://localhost:8081)
-  MEETING_API_TOKEN     (required — API key, must match API_KEY set on the backend)
+  MEETING_API_BASE_URL  (default: http://localhost:8081/api)
+  MEETING_API_TOKEN     (default: admin)
 
 Commands & example payloads:
 

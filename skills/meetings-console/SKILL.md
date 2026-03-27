@@ -1,532 +1,457 @@
 ---
-name: meetings-console
-description: Drive the Meetings Editor system — create meetings, manage people and agenda items, and export government-style .docx documents — using the interactive console client.
-version: 1.0.0
+name: "meetings-console"
+description: "Управление системой протоколов совещаний: создание совещаний, управление участниками, повесткой, председателем и экспорт документов .docx"
+version: 2.0.0
 metadata:
   openclaw:
-    requires:
-      bins: []
-    always: false
     emoji: "📋"
+    always: false
+    requires:
+      bins: ["meetings-console"]
+      env: []
 ---
 
-# Meetings Console — Agent Instructions
+# Описание
 
-You interact with the Meetings Editor system through an interactive console client. The console is a REPL: you send one command per line, it executes against the backend REST API, and prints the result.
+Ты управляешь системой протоколов совещаний. Взаимодействуй с бэкендом **ТОЛЬКО** через консольную утилиту `meetings-console`. Не используй curl, wget, HTTP-клиенты или любые другие инструменты — только `meetings-console`.
 
----
+## Сборка утилиты (если ещё не собрана)
 
-## Starting the console
-
-```
-docker compose run --rm console
+```bash
+cd /путь/к/проекту/console && go build -o meetings-console .
 ```
 
-The console requires the `MEETING_API_TOKEN` env var to be set (must match the `API_KEY` configured on the backend). In Docker Compose this is injected automatically — no manual step needed.
+После сборки убедись, что бинарник доступен в PATH или используй полный путь.
 
-The console prints a banner and a `> ` prompt. Send one command per line.
+## Переменные окружения (необязательны — есть умолчания)
 
-To exit: `quit` or `exit`.
-
----
-
-## Input format rules
-
-These rules are absolute. Violating them produces a parse error or wrong behaviour.
-
-### Tokenization
-
-The line is split into tokens by whitespace. Quoted spans (single `'` or double `"` quotes) are treated as one token — the quotes themselves are stripped, the content inside is preserved verbatim including spaces.
-
-```
-create-meeting "Board Meeting" 2026-03-22
-→ tokens: ["create-meeting", "Board Meeting", "2026-03-22"]
-
-create-person Smith John "Alexei Petrovich" "Head of Finance"
-→ tokens: ["create-person", "Smith", "John", "Alexei Petrovich", "Head of Finance"]
-```
-
-**Rules:**
-- Use `"..."` or `'...'` for any value that contains a space.
-- Never nest quotes. `"it's fine"` works (double wraps single). `'say "hello"'` works (single wraps double). Mixed nesting breaks.
-- Empty lines are ignored.
-- Leading and trailing whitespace is trimmed.
-
-### Argument types
-
-| Notation | Type | Notes |
+| Переменная | Умолчание | Описание |
 |---|---|---|
-| `<meeting_id>` | UUID string | e.g. `3fa85f64-5717-4562-b3fc-2c963f66afa6` — always the full UUID, read from JSON output, never abbreviate or guess |
-| `<person_id>` | Integer | e.g. `5` — read from JSON output |
-| `<item_id>` | Integer | e.g. `3` — read from JSON output |
-| `<date>` | String | Exactly `YYYY-MM-DD`. Any other format is rejected. |
-| `<id1,id2,...>` | Comma-separated integers | No spaces around commas. e.g. `3,1,2` |
-| `<text>` | String | Quote if it contains spaces |
-| `-` | Null / omit | Pass `-` to leave an optional string field empty (no value sent) |
+| `MEETING_API_BASE_URL` | `http://localhost:8081/api` | Адрес бэкенда |
+| `MEETING_API_TOKEN` | `admin` | API-ключ авторизации |
 
-### Outputs
-
-- **Data commands** (list, get, create, update): print pretty-printed JSON to stdout.
-- **Mutation commands with no return** (reorder-*): print `ok` to stdout.
-- **Errors**: print `error: <message>` to stderr. The prompt returns. The session continues.
-
----
-
-## Command scope
-
-The console covers every REST endpoint **except** `DELETE /people/{id}` and `DELETE /meetings/{id}`. Those destructive operations are not exposed via the console.
-
----
-
----
-
-## Commands
-
-### People
-
-#### `list-people [query]`
-Search people by name. If no query, returns all people. Returns up to 100 results.
-Query is word-by-word partial match. Multiple words are joined with a space.
+## Формат вызова
 
 ```
-list-people
-list-people smith
-list-people john alexei
+meetings-console <КОМАНДА> '<JSON_АРГУМЕНТЫ>'
 ```
 
-Returns: JSON array of Person objects. Empty array `[]` if none found.
+**Правила:**
+- JSON всегда в одинарных кавычках
+- Если в значении есть одинарные кавычки — экранируй: `'\''`
+- Ответ всегда начинается с `HTTP <код>`, затем тело в JSON
+- HTTP 200/201 — успех. HTTP 4xx/5xx — ошибка, тело содержит `{"message":"..."}`.
+- Если получил ошибку валидации или 4xx — разбери сообщение, исправь JSON и вызови снова.
+- **Никогда не угадывай UUID или ID** — всегда читай их из ответов предыдущих команд.
+
+---
+
+## Команды
+
+### Система
+
+#### `health`
+Проверка доступности бэкенда.
+
+```bash
+meetings-console health '{}'
+```
+
+---
+
+### Участники (People)
+
+#### `list_people`
+Список всех участников или поиск по имени. Возвращает до 100 результатов.
+
+```bash
+meetings-console list_people '{}'
+meetings-console list_people '{"q":"Иванов"}'
+meetings-console list_people '{"q":"Иван Петров"}'
+```
+
+Возвращает: массив объектов Person.
 
 ```json
 [
   {
     "id": 5,
-    "last_name": "Smith",
-    "first_name": "John",
-    "middle_name": "Alexei",
-    "info": "Head of Finance"
+    "last_name": "Иванов",
+    "first_name": "Иван",
+    "middle_name": "Петрович",
+    "info": "Главный аналитик"
   }
 ]
 ```
 
-`middle_name` and `info` are absent from JSON when null.
+`middle_name` и `info` отсутствуют в JSON если не заданы.
 
 ---
 
-#### `get-person <id>`
-Fetch one person by their integer ID.
+#### `get_person`
+Получить одного участника по ID.
 
-```
-get-person 5
+```bash
+meetings-console get_person '{"id":5}'
 ```
 
-Returns: single Person object.
-Error 404 if ID does not exist.
+Ошибка 404 — участник не найден.
 
 ---
 
-#### `create-person <last_name> <first_name> [middle_name|-] [info|-]`
-Create a new person. `last_name` and `first_name` are required.
-Pass `-` to explicitly omit `middle_name` or `info`. Omitting the argument entirely also omits the field.
+#### `create_person`
+Создать нового участника. `last_name` и `first_name` обязательны.
 
-```
-create-person Smith John
-create-person Smith John Alexei
-create-person Smith John - "Head of Finance"
-create-person Smith John "Alexei Petrovich" "Head of Finance"
+```bash
+meetings-console create_person '{"last_name":"Иванов","first_name":"Иван"}'
+meetings-console create_person '{"last_name":"Иванов","first_name":"Иван","middle_name":"Петрович","info":"Директор"}'
 ```
 
-Returns: created Person object with assigned `id`.
-Error 409 if a person with the same last_name + first_name + middle_name combination already exists.
+Возвращает: созданный объект Person с присвоенным `id`.
+Ошибка 409 — участник с таким именем уже существует.
 
 ---
 
-#### `update-person <id> <last_name> <first_name> [middle_name|-] [info|-]`
-Replace a person's fields. `last_name` and `first_name` are required — you must always supply both.
-`middle_name` and `info` are optional; pass `-` to clear them.
+#### `update_person`
+Обновить данные участника. `last_name` и `first_name` обязательны — всегда передавай оба.
 
-```
-update-person 5 Smith Jane
-update-person 5 Smith Jane Alexei
-update-person 5 Smith Jane - "Deputy Director"
-update-person 5 Smith Jane "Alexei Petrovich" "Deputy Director"
+```bash
+meetings-console update_person '{"id":5,"last_name":"Иванов","first_name":"Иван","middle_name":"Петрович","info":"Заместитель директора"}'
 ```
 
-Returns: updated Person object.
-Error 404 if person not found.
-Error 409 if the new name combination already belongs to a different person.
+Возвращает: обновлённый объект Person.
+Ошибка 404 — участник не найден.
+Ошибка 409 — новое имя уже занято другим участником.
 
 ---
 
-#### `sort-people <id1,id2,...>`
-Return the given person IDs reordered alphabetically by last_name, first_name, middle_name.
-Useful for determining the canonical sort order of a set of participants before persisting it.
+#### `sort_people`
+Вернуть переданные ID участников, отсортированные по фамилии, имени, отчеству.
 
-```
-sort-people 17,5,42
+```bash
+meetings-console sort_people '{"ids":[17,5,42]}'
 ```
 
-Returns: JSON array of integers — the same IDs in alphabetical order.
-
-```json
-[42, 17, 5]
-```
+Возвращает: `{"ids":[42,5,17]}` — те же ID в алфавитном порядке.
 
 ---
 
-### Meetings
+### Совещания (Meetings)
 
-#### `list-meetings [limit] [offset]`
-List meetings, newest first. Defaults: `limit=20`, `offset=0`. Maximum limit is 100.
+#### `list_meetings`
+Список совещаний с пагинацией. `limit` по умолчанию 20, `offset` по умолчанию 0.
+Фильтр по статусу: `"complete"` — только завершённые, `"incomplete"` — только черновики, `""` — все.
 
+```bash
+meetings-console list_meetings '{}'
+meetings-console list_meetings '{"limit":20,"offset":0}'
+meetings-console list_meetings '{"limit":20,"offset":0,"status":"complete"}'
+meetings-console list_meetings '{"status":"incomplete"}'
 ```
-list-meetings
-list-meetings 10
-list-meetings 10 20
-```
 
-Returns:
+Возвращает:
 ```json
 {
   "total": 42,
-  "limit": 10,
-  "offset": 20,
-  "items": [ ... ]
+  "limit": 20,
+  "offset": 0,
+  "items": [ /* массив MeetingSummary */ ]
 }
 ```
 
-Each item in `items` is a MeetingSummary (scalar fields only, no people or agenda items).
+---
+
+#### `create_meeting`
+Создать новое совещание. `title` и `date` обязательны. Дата в формате ISO 8601.
+Создаётся со статусом `incomplete` (черновик).
+
+```bash
+meetings-console create_meeting '{"title":"Совещание по вопросам бюджета","date":"2026-04-01T10:00:00Z"}'
+meetings-console create_meeting '{"title":"Заседание комиссии","date":"2026-04-15T14:00:00Z","place":"г. Москва, ул. Тверская, д. 13"}'
+```
+
+Возвращает: полный объект Meeting. Поле `id` — UUID, используй его во всех последующих командах.
 
 ---
 
-#### `create-meeting <title> <date>`
-Create a new meeting. Title and date are required. Meeting starts as `incomplete`.
+#### `get_meeting`
+Получить полные данные совещания: участники, председатель, повестка с докладчиками.
 
-```
-create-meeting "Board Meeting" 2026-03-22
-create-meeting "Quarterly Review" 2026-04-01
-```
-
-Returns: full Meeting object. The `id` field is the UUID you use for all subsequent commands.
-`status` will be `"incomplete"`.
-
----
-
-#### `get-meeting <id>`
-Fetch full meeting details: scalar fields, chairperson, people list, agenda items with speakers.
-
-```
-get-meeting 3fa85f64-5717-4562-b3fc-2c963f66afa6
+```bash
+meetings-console get_meeting '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
 ```
 
-Returns: full Meeting object.
-
+Возвращает:
 ```json
 {
   "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "title": "Board Meeting",
-  "date": "2026-03-22T00:00:00Z",
+  "title": "Совещание по бюджету",
+  "date": "2026-04-01T10:00:00Z",
+  "place": "г. Москва",
   "status": "complete",
-  "chairperson": { "id": 5, "last_name": "Smith", "first_name": "John" },
-  "people": [ ... ],
-  "agenda_items": [ ... ],
-  "created_at": "2026-03-22T10:00:00Z"
+  "chairperson": {"id": 5, "last_name": "Иванов", "first_name": "Иван"},
+  "people": [ /* массив Person */ ],
+  "agenda_items": [ /* массив AgendaItem */ ],
+  "created_at": "2026-03-20T08:00:00Z"
 }
 ```
 
 ---
 
-#### `get-meeting-meta <id>`
-Fetch scalar fields only (id, title, date, status, chairperson, created_at). No people or agenda items.
-Use this to check status without fetching the full payload.
+#### `get_meeting_meta`
+Получить только скалярные поля совещания (без участников и повестки). Используй для проверки статуса.
 
-```
-get-meeting-meta 3fa85f64-5717-4562-b3fc-2c963f66afa6
-```
-
-Returns: MeetingSummary object.
-
----
-
-#### `get-meeting-people <id>`
-Fetch the ordered people list for a meeting.
-
-```
-get-meeting-people 3fa85f64-5717-4562-b3fc-2c963f66afa6
-```
-
-Returns: JSON array of Person objects in their current display order.
-
----
-
-#### `get-meeting-agenda <id>`
-Fetch the ordered agenda items with their speakers.
-
-```
-get-meeting-agenda 3fa85f64-5717-4562-b3fc-2c963f66afa6
-```
-
-Returns: JSON array of AgendaItem objects:
-```json
-[
-  {
-    "id": 3,
-    "text": "Budget review",
-    "speakers": [
-      { "id": 5, "last_name": "Smith", "first_name": "John" }
-    ]
-  }
-]
+```bash
+meetings-console get_meeting_meta '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
 ```
 
 ---
 
-#### `update-meeting <id> <title> <date>`
-Replace a meeting's title and date. Both are required — you must always supply both.
+#### `update_meeting`
+Изменить тему, дату и место совещания. `title` и `date` обязательны — передавай оба всегда.
 
-```
-update-meeting 3fa85f64-5717-4562-b3fc-2c963f66afa6 "New Title" 2026-04-15
+```bash
+meetings-console update_meeting '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","title":"Новая тема","date":"2026-04-02T10:00:00Z"}'
+meetings-console update_meeting '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","title":"Новая тема","date":"2026-04-02T10:00:00Z","place":"Зал заседаний №2"}'
 ```
 
-Returns: updated Meeting object.
-Error 404 if meeting not found.
+Ошибка 404 — совещание не найдено.
 
 ---
 
-#### `set-chairperson <meeting_id> <person_id>`
-Set or replace the chairperson. The person **must already be in the meeting's people list**.
+### Участники совещания
 
-```
-set-chairperson 3fa85f64-5717-4562-b3fc-2c963f66afa6 5
-```
+#### `list_meeting_people`
+Получить список участников конкретного совещания в текущем порядке.
 
-Returns: updated Meeting object.
-Error 422 if the person is not in the meeting's people list (add them first with `add-person`).
+```bash
+meetings-console list_meeting_people '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+```
 
 ---
 
-#### `add-person <meeting_id> <person_id>`
-Add a person to the meeting's people list. The person is appended to the end.
+#### `add_meeting_person`
+Добавить участника в совещание. Участник должен существовать в базе данных.
 
-```
-add-person 3fa85f64-5717-4562-b3fc-2c963f66afa6 5
+```bash
+meetings-console add_meeting_person '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","person_id":5}'
 ```
 
-Returns: updated Meeting object.
-Error 409 if the person is already in the meeting.
-Error 422 if the person ID does not exist in the database.
+Ошибка 409 — участник уже добавлен в совещание.
+Ошибка 422 — участник с таким ID не существует в базе.
 
 ---
 
-#### `remove-person <meeting_id> <person_id>`
-Remove a person from the meeting's people list.
+#### `remove_meeting_person`
+Удалить участника из совещания.
 
-```
-remove-person 3fa85f64-5717-4562-b3fc-2c963f66afa6 5
+```bash
+meetings-console remove_meeting_person '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","person_id":5}'
 ```
 
-Returns: updated Meeting object.
-Error 409 if the person is the chairperson or a speaker on any agenda item — remove those roles first.
+Ошибка 409 — участник является председателем или докладчиком. Сначала убери эти роли.
 
 ---
 
-#### `reorder-people <meeting_id> <id1,id2,...>`
-Set the display order of people in the meeting. Must include **all** current person IDs — no additions or removals, only order.
+#### `order_meeting_people`
+Установить порядок отображения участников. Передай **все** текущие ID участников — только в нужном порядке.
 
-```
-reorder-people 3fa85f64-5717-4562-b3fc-2c963f66afa6 3,1,2
+```bash
+meetings-console order_meeting_people '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","person_ids":[5,7,3]}'
 ```
 
-Returns: `ok`
-Error 422 if the provided IDs do not exactly match the meeting's current people set.
+Ошибка 422 — переданные ID не совпадают точно с текущим составом участников.
 
 ---
 
-### Agenda items
+### Председатель
 
-#### `add-agenda-item <meeting_id> <text> <speaker_id1,...>`
-Add an agenda item. Text and at least one speaker ID are required.
-All speakers must already be in the meeting's people list.
+#### `set_chairperson`
+Назначить или заменить председателя. Участник **уже должен быть в списке участников совещания**.
 
-```
-add-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 "Budget review" 5
-add-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 "Personnel matters" 5,7,3
+```bash
+meetings-console set_chairperson '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","person_id":5}'
 ```
 
-Returns: updated Meeting object (with the new agenda item visible in `agenda_items`).
-Error 422 if any speaker_id is not in the meeting's people list.
+Ошибка 422 — участник не в списке участников совещания. Сначала вызови `add_meeting_person`.
 
 ---
 
-#### `update-agenda-item <meeting_id> <item_id> <text> <speaker_id1,...>`
-Replace the text and full speaker list of an existing agenda item.
-This is a full replacement — supply all speakers you want, not just new ones.
-At least one speaker ID required. All must be in the meeting's people list.
+### Повестка
 
-```
-update-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 3 "Revised budget review" 5,7
-```
+#### `list_agenda_items`
+Получить список пунктов повестки с докладчиками.
 
-Returns: updated Meeting object.
-Error 422 if any speaker_id is not in the meeting's people list.
+```bash
+meetings-console list_agenda_items '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+```
 
 ---
 
-#### `delete-agenda-item <meeting_id> <item_id>`
-Delete an agenda item.
+#### `add_agenda_item`
+Добавить пункт повестки. Текст и хотя бы один докладчик обязательны.
+Все докладчики должны быть в списке участников совещания.
 
-```
-delete-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 3
+```bash
+meetings-console add_agenda_item '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","text":"Утверждение бюджета","speaker_ids":[5]}'
+meetings-console add_agenda_item '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","text":"Кадровые вопросы","speaker_ids":[5,7,3]}'
 ```
 
-Returns: updated Meeting object.
+Ошибка 422 — кто-то из докладчиков не в списке участников. Сначала вызови `add_meeting_person`.
 
 ---
 
-#### `reorder-agenda-items <meeting_id> <id1,id2,...>`
-Set the display order of agenda items. Must include **all** current item IDs — no additions or removals, only order.
+#### `update_agenda_item`
+Полностью заменить текст и список докладчиков пункта повестки. Передай всех нужных докладчиков.
 
-```
-reorder-agenda-items 3fa85f64-5717-4562-b3fc-2c963f66afa6 2,1,3
+```bash
+meetings-console update_agenda_item '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","item_id":3,"text":"Уточнённый бюджет","speaker_ids":[5,7]}'
 ```
 
-Returns: `ok`
-Error 422 if the provided IDs do not exactly match the meeting's current agenda items.
+Ошибка 422 — докладчик не в участниках совещания.
 
 ---
 
-#### `add-speaker <meeting_id> <item_id> <person_id>`
-Add a speaker to an existing agenda item. The person must be in the meeting's people list.
+#### `delete_agenda_item`
+Удалить пункт повестки.
 
+```bash
+meetings-console delete_agenda_item '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","item_id":3}'
 ```
-add-speaker 3fa85f64-5717-4562-b3fc-2c963f66afa6 3 7
-```
-
-Returns: updated Meeting object.
-Error 409 if the person is already a speaker on this agenda item.
-Error 422 if the person is not in the meeting's people list.
 
 ---
 
-#### `remove-speaker <meeting_id> <item_id> <person_id>`
-Remove a speaker from an agenda item.
+#### `order_agenda_items`
+Установить порядок пунктов повестки. Передай **все** текущие ID пунктов.
 
-```
-remove-speaker 3fa85f64-5717-4562-b3fc-2c963f66afa6 3 7
+```bash
+meetings-console order_agenda_items '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","agenda_item_ids":[3,1,2]}'
 ```
 
-Returns: updated Meeting object.
-Error 409 if this is the last speaker — an agenda item must always have at least one speaker.
+Ошибка 422 — ID не совпадают точно с текущим набором пунктов.
 
 ---
 
-#### `reorder-speakers <meeting_id> <item_id> <id1,id2,...>`
-Set the display order of speakers on an agenda item. Must include **all** current speaker IDs for that item — no additions or removals, only order.
+### Докладчики пунктов повестки
 
-```
-reorder-speakers 3fa85f64-5717-4562-b3fc-2c963f66afa6 3 7,5
+#### `add_speaker`
+Добавить докладчика к пункту повестки. Участник должен быть в списке участников совещания.
+
+```bash
+meetings-console add_speaker '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","item_id":3,"person_id":7}'
 ```
 
-Returns: `ok`
-Error 422 if the provided IDs do not exactly match the item's current speakers.
+Ошибка 409 — участник уже является докладчиком этого пункта.
+Ошибка 422 — участник не в списке участников совещания.
 
 ---
 
-### Export
+#### `remove_speaker`
+Убрать докладчика из пункта повестки.
 
-Export is only available when the meeting is `complete`. Both commands return error 409 when status is `incomplete`.
-
-#### `export-agenda <meeting_id> <output_file>`
-Download the Повестка (Agenda) document as a `.docx` file.
-
-```
-export-agenda 3fa85f64-5717-4562-b3fc-2c963f66afa6 agenda.docx
-export-agenda 3fa85f64-5717-4562-b3fc-2c963f66afa6 /tmp/meeting-agenda.docx
+```bash
+meetings-console remove_speaker '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","item_id":3,"person_id":7}'
 ```
 
-Returns: `saved N bytes → <output_file>`
-The file is written to the path you specify. Inside a Docker container the path is relative to `/app`.
-Error 409 if the meeting is `incomplete`.
+Ошибка 409 — нельзя убрать последнего докладчика. Сначала добавь другого.
 
 ---
 
-#### `export-participants <meeting_id> <output_file>`
-Download the Список участников (Participant list) document as a `.docx` file.
+#### `order_speakers`
+Установить порядок докладчиков пункта повестки. Передай **все** текущие ID докладчиков этого пункта.
 
+```bash
+meetings-console order_speakers '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6","item_id":3,"person_ids":[7,5]}'
 ```
-export-participants 3fa85f64-5717-4562-b3fc-2c963f66afa6 participants.docx
-```
-
-Returns: `saved N bytes → <output_file>`
-Error 409 if the meeting is `incomplete`.
 
 ---
 
-## Meeting status
+### Экспорт документов
 
-`status` is computed at read time, never stored. Check it via `get-meeting-meta`.
+Экспорт доступен только для совещаний со статусом `complete`. При `incomplete` — ошибка 409.
 
-| Status | Condition |
+#### `export_agenda`
+Скачать документ «Повестка» в формате .docx. Файл сохраняется на диск.
+
+```bash
+meetings-console export_agenda '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+```
+
+Файл сохраняется как `agenda-<meeting_id>.docx` в текущей директории.
+
+---
+
+#### `export_participants`
+Скачать документ «Список участников» в формате .docx.
+
+```bash
+meetings-console export_participants '{"meeting_id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
+```
+
+Файл сохраняется как `participants-<meeting_id>.docx` в текущей директории.
+
+---
+
+## Статус совещания
+
+Статус вычисляется автоматически при каждом запросе — не хранится.
+
+| Статус | Условие |
 |---|---|
-| `incomplete` | chairperson is null, OR people list is empty, OR agenda items list is empty |
-| `complete` | chairperson set AND ≥1 person AND ≥1 agenda item (each with ≥1 speaker) |
-
-Export is blocked (409) when `incomplete`.
+| `incomplete` | нет председателя, ИЛИ нет участников, ИЛИ нет пунктов повестки |
+| `complete` | есть председатель И ≥1 участник И ≥1 пункт повестки (каждый с ≥1 докладчиком) |
 
 ---
 
-## Standard workflow
+## Стандартный порядок создания полного совещания
 
-Follow this sequence to produce a complete, exportable meeting:
+```bash
+# 1. Найти или создать участников
+meetings-console list_people '{"q":"Иванов"}'
+meetings-console create_person '{"last_name":"Иванов","first_name":"Иван","middle_name":"Петрович","info":"Директор"}'
+meetings-console create_person '{"last_name":"Петров","first_name":"Сергей","info":"Аналитик"}'
+# → запомни id каждого участника (например 5 и 7)
 
-```
-# 1. Find or create people
-list-people smith
-create-person Smith John "Alexei" "Head of Finance"
-create-person Doe Jane - "Deputy Director"
-# → note the id values from each response (e.g. 5, 7)
+# 2. Создать совещание
+meetings-console create_meeting '{"title":"Совещание по итогам квартала","date":"2026-04-01T10:00:00Z"}'
+# → запомни id совещания (UUID)
 
-# 2. Create the meeting (starts incomplete)
-create-meeting "Board Meeting" 2026-03-22
-# → note the full UUID id from the response
+# 3. Добавить участников в совещание
+meetings-console add_meeting_person '{"meeting_id":"<uuid>","person_id":5}'
+meetings-console add_meeting_person '{"meeting_id":"<uuid>","person_id":7}'
 
-# 3. Add people to the meeting
-add-person 3fa85f64-5717-4562-b3fc-2c963f66afa6 5
-add-person 3fa85f64-5717-4562-b3fc-2c963f66afa6 7
+# 4. Назначить председателя (должен уже быть в участниках)
+meetings-console set_chairperson '{"meeting_id":"<uuid>","person_id":5}'
 
-# 4. Set chairperson (must already be in people list)
-set-chairperson 3fa85f64-5717-4562-b3fc-2c963f66afa6 5
+# 5. Добавить пункты повестки
+meetings-console add_agenda_item '{"meeting_id":"<uuid>","text":"Вступительное слово","speaker_ids":[5]}'
+meetings-console add_agenda_item '{"meeting_id":"<uuid>","text":"Итоги квартала","speaker_ids":[5,7]}'
+meetings-console add_agenda_item '{"meeting_id":"<uuid>","text":"Планы на следующий квартал","speaker_ids":[7]}'
 
-# 5. Add agenda items (speakers must be in people list)
-add-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 "Opening remarks" 5
-add-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 "Budget review" 5,7
-add-agenda-item 3fa85f64-5717-4562-b3fc-2c963f66afa6 "Personnel matters" 7
-
-# 6. Verify status is complete
-get-meeting-meta 3fa85f64-5717-4562-b3fc-2c963f66afa6
+# 6. Проверить статус
+meetings-console get_meeting_meta '{"id":"<uuid>"}'
 # → "status": "complete"
 
-# 7. Export
-export-agenda 3fa85f64-5717-4562-b3fc-2c963f66afa6 agenda.docx
-export-participants 3fa85f64-5717-4562-b3fc-2c963f66afa6 participants.docx
+# 7. Экспортировать документы
+meetings-console export_agenda '{"meeting_id":"<uuid>"}'
+meetings-console export_participants '{"meeting_id":"<uuid>"}'
 ```
 
 ---
 
-## Error reference
+## Справочник ошибок
 
-| Error | Cause | Fix |
-|---|---|---|
-| `error: <message>` on stderr | Any API or parse error. Session continues. | Read the message, correct your command. |
-| 404 | Resource not found. | Verify the ID — read it from a list or get command. |
-| 409 on `create-person` | Name collision (same last+first+middle). | Use `list-people` to find the existing person. |
-| 409 on `remove-person` | Person is chairperson or a speaker on an agenda item. | Remove those roles first. |
-| 409 on `remove-speaker` | Last speaker on the item. | Add another speaker before removing. |
-| 409 on `add-speaker` | Person is already a speaker on this item. | No action needed. |
-| 409 on export | Meeting is `incomplete`. | Check `get-meeting-meta` and fix the missing part. |
-| 422 on `set-chairperson` | Person not in meeting's people list. | Run `add-person` first. |
-| 422 on `add-person` | Person ID does not exist in the database. | Run `list-people` or `get-person` to verify. |
-| 422 on `add-agenda-item` / `update-agenda-item` | A speaker_id is not in the meeting's people list. | Run `add-person` for each missing speaker first. |
-| 422 on `add-speaker` | Person not in meeting's people list. | Run `add-person` first. |
-| 422 on `reorder-*` | Provided IDs don't exactly match the current set. | Fetch the current list first, use all IDs. |
-| `error: expected integer` | Non-integer where person_id or item_id was expected. | Check argument positions. |
-| `error: invalid date` | Date not in `YYYY-MM-DD` format. | Use exactly `YYYY-MM-DD`. |
+| Код | Команда | Причина | Решение |
+|---|---|---|---|
+| 404 | любая | Ресурс не найден | Проверь ID через list/get команду |
+| 409 | `create_person` | Имя уже занято | Найди через `list_people` |
+| 409 | `remove_meeting_person` | Участник — председатель или докладчик | Убери роли перед удалением |
+| 409 | `remove_speaker` | Последний докладчик пункта | Добавь другого докладчика сначала |
+| 409 | `add_meeting_person` | Участник уже в совещании | Не нужно добавлять повторно |
+| 409 | `add_speaker` | Уже является докладчиком | Не нужно добавлять повторно |
+| 409 | `export_*` | Совещание в статусе incomplete | Проверь `get_meeting_meta`, заполни недостающее |
+| 422 | `set_chairperson` | Участник не в списке совещания | Сначала `add_meeting_person` |
+| 422 | `add_meeting_person` | ID не существует в базе | Проверь через `list_people` или `get_person` |
+| 422 | `add_agenda_item` / `update_agenda_item` | Докладчик не в участниках | Сначала `add_meeting_person` для каждого |
+| 422 | `add_speaker` | Участник не в списке совещания | Сначала `add_meeting_person` |
+| 422 | `order_*` | Переданные ID не совпадают с текущим набором | Получи актуальный список, передай все ID |
