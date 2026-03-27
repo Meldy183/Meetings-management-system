@@ -49,8 +49,8 @@ func TestPersonList_NoQuery_ReturnsAll(t *testing.T) {
 	ctx := testutil.Ctx()
 
 	people := []person.Person{{ID: 1, LastName: "Иванов", FirstName: "Иван"}}
-	svc.EXPECT().GetAll(gomock.Any()).DoAndReturn(func(c any) ([]person.Person, error) {
-		_ = c
+	svc.EXPECT().GetAll(gomock.Any(), "alpha").DoAndReturn(func(c any, o any) ([]person.Person, error) {
+		_, _ = c, o
 		return people, nil
 	})
 

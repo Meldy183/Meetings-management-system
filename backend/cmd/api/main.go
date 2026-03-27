@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log"
@@ -33,6 +34,12 @@ func main() {
 
 	appLog := logger.New(cfg.Env)
 
+	// Generate a random JWT signing secret (invalidated on restart — acceptable for 1h tokens)
+	jwtSecret := make([]byte, 32)
+	if _, err := rand.Read(jwtSecret); err != nil {
+		log.Fatal("failed to generate JWT secret:", err)
+	}
+
 	// DB connection pool
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.DBDSN)
@@ -61,43 +68,50 @@ func main() {
 	// Handlers
 	ph := handler.NewPersonHandler(personSvc)
 	mh := handler.NewMeetingHandler(meetingSvc, exportGen)
+	ah := handler.NewAuthHandler(jwtSecret, cfg.AdminPassword)
 
-	// Router (Go 1.22+ method+path patterns)
+	// Protected routes — require JWT cookie or API key
+	protected := http.NewServeMux()
+
+	protected.HandleFunc("GET /people", ph.List)
+	protected.HandleFunc("POST /people", ph.Create)
+	protected.HandleFunc("POST /people/sort", ph.Sort)
+	protected.HandleFunc("GET /people/{id}", ph.GetByID)
+	protected.HandleFunc("PATCH /people/{id}", ph.Update)
+	protected.HandleFunc("DELETE /people/{id}", ph.Delete)
+
+	protected.HandleFunc("GET /meetings", mh.List)
+	protected.HandleFunc("POST /meetings", mh.Create)
+	protected.HandleFunc("GET /meetings/{id}", mh.GetByID)
+	protected.HandleFunc("GET /meetings/{id}/meta", mh.GetMeta)
+	protected.HandleFunc("GET /meetings/{id}/people", mh.GetPeople)
+	protected.HandleFunc("GET /meetings/{id}/agenda-items", mh.GetAgendaItems)
+	protected.HandleFunc("PATCH /meetings/{id}", mh.Update)
+	protected.HandleFunc("DELETE /meetings/{id}", mh.Delete)
+	protected.HandleFunc("PUT /meetings/{id}/chairperson", mh.SetChairperson)
+	protected.HandleFunc("POST /meetings/{id}/people", mh.AddPerson)
+	protected.HandleFunc("DELETE /meetings/{id}/people/{pid}", mh.RemovePerson)
+	protected.HandleFunc("PUT /meetings/{id}/people/order", mh.ReorderPeople)
+	protected.HandleFunc("POST /meetings/{id}/agenda-items", mh.AddAgendaItem)
+	protected.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}", mh.UpdateAgendaItem)
+	protected.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}", mh.DeleteAgendaItem)
+	protected.HandleFunc("POST /meetings/{id}/agenda-items/{item_id}/speakers", mh.AddAgendaItemSpeaker)
+	protected.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}/speakers/{pid}", mh.RemoveAgendaItemSpeaker)
+	protected.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}/speakers/order", mh.ReorderAgendaItemSpeakers)
+	protected.HandleFunc("PUT /meetings/{id}/agenda-items/order", mh.ReorderAgendaItems)
+	protected.HandleFunc("GET /meetings/{id}/export/agenda", mh.ExportAgenda)
+	protected.HandleFunc("GET /meetings/{id}/export/participants", mh.ExportParticipants)
+
+	// Main router: public routes + auth-guarded catch-all
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ok")
 	})
-
-	mux.HandleFunc("GET /people", ph.List)
-	mux.HandleFunc("POST /people", ph.Create)
-	mux.HandleFunc("POST /people/sort", ph.Sort)
-	mux.HandleFunc("GET /people/{id}", ph.GetByID)
-	mux.HandleFunc("PATCH /people/{id}", ph.Update)
-	mux.HandleFunc("DELETE /people/{id}", ph.Delete)
-
-	mux.HandleFunc("GET /meetings", mh.List)
-	mux.HandleFunc("POST /meetings", mh.Create)
-	mux.HandleFunc("GET /meetings/{id}", mh.GetByID)
-	mux.HandleFunc("GET /meetings/{id}/meta", mh.GetMeta)
-	mux.HandleFunc("GET /meetings/{id}/people", mh.GetPeople)
-	mux.HandleFunc("GET /meetings/{id}/agenda-items", mh.GetAgendaItems)
-	mux.HandleFunc("PATCH /meetings/{id}", mh.Update)
-	mux.HandleFunc("DELETE /meetings/{id}", mh.Delete)
-	mux.HandleFunc("PUT /meetings/{id}/chairperson", mh.SetChairperson)
-	mux.HandleFunc("POST /meetings/{id}/people", mh.AddPerson)
-	mux.HandleFunc("DELETE /meetings/{id}/people/{pid}", mh.RemovePerson)
-	mux.HandleFunc("PUT /meetings/{id}/people/order", mh.ReorderPeople)
-	mux.HandleFunc("POST /meetings/{id}/agenda-items", mh.AddAgendaItem)
-	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}", mh.UpdateAgendaItem)
-	mux.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}", mh.DeleteAgendaItem)
-	mux.HandleFunc("POST /meetings/{id}/agenda-items/{item_id}/speakers", mh.AddAgendaItemSpeaker)
-	mux.HandleFunc("DELETE /meetings/{id}/agenda-items/{item_id}/speakers/{pid}", mh.RemoveAgendaItemSpeaker)
-	mux.HandleFunc("PUT /meetings/{id}/agenda-items/{item_id}/speakers/order", mh.ReorderAgendaItemSpeakers)
-	mux.HandleFunc("PUT /meetings/{id}/agenda-items/order", mh.ReorderAgendaItems)
-	mux.HandleFunc("GET /meetings/{id}/export/agenda", mh.ExportAgenda)
-	mux.HandleFunc("GET /meetings/{id}/export/participants", mh.ExportParticipants)
+	mux.HandleFunc("POST /auth/login", ah.Login)
+	mux.HandleFunc("POST /auth/logout", ah.Logout)
+	mux.Handle("/", middleware.Auth(jwtSecret, cfg.APIKey)(protected))
 
 	// Chain middleware: CORS → Logging → mux
 	var httpHandler http.Handler = mux

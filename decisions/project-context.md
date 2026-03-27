@@ -23,15 +23,13 @@ meetings-editor/
 ├── backend/          # Go HTTP server
 ├── frontend/         # React SPA
 ├── console/          # Interactive REPL client (Go, stdlib only)
-├── mcp/              # MCP server (kept for reference, not primary interface)
 ├── skills/
 │   └── meetings-console/
 │       └── SKILL.md  # OpenClaw agent skill — full command reference
 ├── decisions/        # Architecture decisions and plans
 │   ├── project-context.md   ← you are here
 │   ├── frontend-plan.md
-│   ├── v1-corrections.md
-│   └── mcp-layer.md
+│   └── v1-corrections.md
 ├── openapi.yaml      # Single source of truth for API contract
 └── docker-compose.yml
 ```
@@ -160,8 +158,6 @@ BACKEND_URL=http://localhost:8080 go run .
 ## AI Agent Integration
 
 OpenClaw (also known as Clawd/Moltbot) can drive the system via the console client using the skill defined in `skills/meetings-console/SKILL.md`. The skill file documents the complete command format, argument types, return values, and error codes.
-
-OpenClaw does not have native MCP support. The MCP server in `mcp/` is kept in the repository for reference but is not the primary programmatic interface.
 
 ---
 

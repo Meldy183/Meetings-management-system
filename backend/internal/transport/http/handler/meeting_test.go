@@ -50,7 +50,7 @@ func TestMeetingList_OK(t *testing.T) {
 	svc, export, h := newMeetingHandler(t)
 	_ = export
 
-	svc.EXPECT().GetAll(gomock.Any(), 20, 0).Return(
+	svc.EXPECT().GetAll(gomock.Any(), 20, 0, "").Return(
 		[]domMeeting.Meeting{*completeMeetingDomain()}, 1, nil,
 	)
 

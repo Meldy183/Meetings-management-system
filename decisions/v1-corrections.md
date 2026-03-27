@@ -36,7 +36,7 @@ This document captures all corrections requested after MVP v0, the rationale beh
 
 **Decision:** Add `GET /people/{id}` returning the full person object.
 
-**Rationale:** The API previously had no way to fetch a single person by ID — required by MCP tools that receive an ID from one call and need to resolve it in another.
+**Rationale:** The API previously had no way to fetch a single person by ID — required when an ID is returned from one call and needs to be resolved in another.
 
 ---
 
@@ -97,7 +97,7 @@ Status is **derived at read time** — not stored as a column. `chairperson_id` 
 | `GET /meetings/{id}/agenda-items` | Ordered agenda items list only |
 | `GET /meetings/{id}/meta` | `id, title, date, status, chairperson_id, created_at` — no arrays |
 
-**Rationale:** MCP tools benefit from targeted endpoints that return exactly the data needed for a decision, avoiding large payloads. `GET /meetings/{id}/meta` is specifically designed for agent use.
+**Rationale:** Targeted endpoints return exactly the data needed for a decision, avoiding large payloads. `GET /meetings/{id}/meta` is specifically designed for agent and console use.
 
 ---
 

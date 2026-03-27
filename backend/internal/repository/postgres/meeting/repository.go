@@ -3,6 +3,7 @@ package meeting
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -25,13 +26,12 @@ const (
 		INSERT INTO meeting_participants (meeting_id, person_id, position)
 		VALUES ($1, $2, $3)`
 
-	queryCountMeetings = `SELECT COUNT(*) FROM meetings`
-
-	queryListMeetings = `
+	queryListMeetingsTpl = `
 		SELECT m.id, m.title, m.date, m.place, m.created_at,
 		       p.id, p.last_name, p.first_name, p.middle_name, p.info
 		FROM meetings m
 		LEFT JOIN participants p ON p.id = m.chairperson_id
+		%s
 		ORDER BY m.date DESC
 		LIMIT $1 OFFSET $2`
 
@@ -154,17 +154,37 @@ func scanChairperson(id *int, lastName, firstName, middleName, info *string) *pe
 	}
 }
 
-func (r *repository) GetAll(ctx context.Context, limit, offset int) ([]meeting.Meeting, int, error) {
+// statusWhereClause returns a SQL WHERE clause (or empty string) for the given status filter.
+func statusWhereClause(status string) string {
+	switch status {
+	case "complete":
+		return `WHERE m.chairperson_id IS NOT NULL
+		  AND EXISTS (SELECT 1 FROM meeting_participants mp WHERE mp.meeting_id = m.id)
+		  AND EXISTS (SELECT 1 FROM agenda_items ai WHERE ai.meeting_id = m.id)`
+	case "incomplete":
+		return `WHERE (m.chairperson_id IS NULL
+		  OR NOT EXISTS (SELECT 1 FROM meeting_participants mp WHERE mp.meeting_id = m.id)
+		  OR NOT EXISTS (SELECT 1 FROM agenda_items ai WHERE ai.meeting_id = m.id))`
+	default:
+		return ""
+	}
+}
+
+func (r *repository) GetAll(ctx context.Context, limit, offset int, status string) ([]meeting.Meeting, int, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: list meetings", zap.Int("limit", limit), zap.Int("offset", offset))
+	log.Info(ctx, "repo: list meetings", zap.Int("limit", limit), zap.Int("offset", offset), zap.String("status", status))
+
+	where := statusWhereClause(status)
 
 	var total int
-	if err := r.db.QueryRow(ctx, queryCountMeetings).Scan(&total); err != nil {
+	countQ := "SELECT COUNT(*) FROM meetings m " + where
+	if err := r.db.QueryRow(ctx, countQ).Scan(&total); err != nil {
 		log.Error(ctx, "repo: failed to count meetings", zap.Error(err))
 		return nil, 0, err
 	}
 
-	rows, err := r.db.Query(ctx, queryListMeetings, limit, offset)
+	listQ := fmt.Sprintf(queryListMeetingsTpl, where)
+	rows, err := r.db.Query(ctx, listQ, limit, offset)
 	if err != nil {
 		log.Error(ctx, "repo: failed to list meetings", zap.Error(err))
 		return nil, 0, err

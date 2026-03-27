@@ -45,9 +45,15 @@ OpenClaw agent / developer
 
 ### Option A — Docker Compose (recommended)
 
+Set credentials before starting (or create a `.env` file):
+
 ```bash
+export ADMIN_PASSWORD=your-password
+export API_KEY=your-api-key
 docker compose up --build -d
 ```
+
+The defaults (`changeme` / `changeme-api-key`) work for local dev but must be changed in production.
 
 | Service | URL |
 |---|---|
@@ -80,6 +86,8 @@ cd frontend && npm install && npm run dev
 | `DATABASE_URL` | PostgreSQL DSN |
 | `PORT` | HTTP listen address (default `8080`) |
 | `ENV` | `dev` for human-readable logs, `prod` for JSON |
+| `ADMIN_PASSWORD` | Password for the `admin` login (required) |
+| `API_KEY` | API key for programmatic access (required) |
 
 ---
 
@@ -126,6 +134,7 @@ Full command reference: `skills/meetings-console/SKILL.md`
 | Variable | Description |
 |---|---|
 | `BACKEND_URL` | Backend base URL (default `http://localhost:8080`) |
+| `MEETING_API_TOKEN` | API key — must match `API_KEY` set on the backend (required) |
 
 ---
 
@@ -235,7 +244,6 @@ Format: Times New Roman 14pt, A4, matches official government template.
 │   ├── people.go                people types + API methods
 │   ├── meetings.go              meeting types + API methods
 │   └── Dockerfile
-├── mcp/                         MCP server (kept for reference, not primary interface)
 ├── skills/
 │   └── meetings-console/
 │       └── SKILL.md             OpenClaw agent skill — full command reference

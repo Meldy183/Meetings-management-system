@@ -9,7 +9,7 @@ export function MeetingListPage() {
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['meetings', offset],
-    queryFn: () => getMeetings(limit, offset),
+    queryFn: () => getMeetings(limit, offset, 'complete'),
   })
 
   function formatDate(iso: string) {
@@ -38,24 +38,20 @@ export function MeetingListPage() {
               <Link
                 key={meeting.id}
                 to={`/meetings/${meeting.id}`}
-                className="block p-4 bg-white border rounded-lg hover:border-green-400 transition-colors"
+                className="flex items-center gap-3 p-4 bg-white border rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm text-gray-900 leading-snug">{meeting.title}</p>
-                  {meeting.status === 'incomplete' && (
-                    <span className="shrink-0 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
-                      Черновик
-                    </span>
+                  <p className="text-xs text-gray-500 mt-1">{formatDate(meeting.date)}</p>
+                  {meeting.chairperson ? (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {meeting.chairperson.last_name} {meeting.chairperson.first_name}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-400 mt-0.5 italic">Председатель не назначен</p>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">{formatDate(meeting.date)}</p>
-                {meeting.chairperson ? (
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {meeting.chairperson.last_name} {meeting.chairperson.first_name}
-                  </p>
-                ) : (
-                  <p className="text-xs text-gray-400 mt-0.5 italic">Председатель не назначен</p>
-                )}
+                <span className="shrink-0 text-gray-300 text-lg">›</span>
               </Link>
             ))}
             {data.items.length === 0 && (

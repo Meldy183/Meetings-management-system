@@ -1,11 +1,16 @@
 package config
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 type Config struct {
-	HTTPAddr string
-	DBDSN    string
-	Env      string
+	HTTPAddr      string
+	DBDSN         string
+	Env           string
+	AdminPassword string
+	APIKey        string
 }
 
 func Load() (*Config, error) {
@@ -24,9 +29,21 @@ func Load() (*Config, error) {
 		env = "dev"
 	}
 
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		return nil, errors.New("ADMIN_PASSWORD env var is required")
+	}
+
+	apiKey := os.Getenv("API_KEY")
+	if apiKey == "" {
+		return nil, errors.New("API_KEY env var is required")
+	}
+
 	return &Config{
-		HTTPAddr: ":" + port,
-		DBDSN:    dsn,
-		Env:      env,
+		HTTPAddr:      ":" + port,
+		DBDSN:         dsn,
+		Env:           env,
+		AdminPassword: adminPassword,
+		APIKey:        apiKey,
 	}, nil
 }

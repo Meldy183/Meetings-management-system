@@ -8,9 +8,10 @@ import {
   addMeetingPerson, removeMeetingPerson,
   addAgendaItem, updateAgendaItem, deleteAgendaItem,
 } from '../api/meetings'
-import { getPeople, sortPeople } from '../api/people'
+import { sortPeople } from '../api/people'
 import { ApiError } from '../api/client'
 import { SpeakerPicker } from '../components/SpeakerPicker'
+import { ParticipantSearch } from '../components/ParticipantSearch'
 import type { Person, AgendaItem, Meeting } from '../api/types'
 
 function useDragReorder<T>(
@@ -71,11 +72,6 @@ export function MeetingDetailPage() {
   const [showAddItem, setShowAddItem] = useState(false)
   const [newItem, setNewItem] = useState({ text: '', speaker_ids: [] as number[] })
 
-  // Add person search state
-  const [personQuery, setPersonQuery] = useState('')
-  const [debouncedPersonQuery, setDebouncedPersonQuery] = useState('')
-  const [personError, setPersonError] = useState<string | null>(null)
-
   const { data: meeting, isLoading, isError } = useQuery({
     queryKey: ['meeting', id],
     queryFn: () => getMeeting(id!),
@@ -88,17 +84,6 @@ export function MeetingDetailPage() {
       setPeople(meeting.people)
     }
   }, [meeting])
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedPersonQuery(personQuery), 300)
-    return () => clearTimeout(t)
-  }, [personQuery])
-
-  const { data: searchResults = [], isFetching: isSearching } = useQuery({
-    queryKey: ['people', 'search', debouncedPersonQuery],
-    queryFn: () => getPeople(debouncedPersonQuery),
-    enabled: debouncedPersonQuery.trim().length > 0,
-  })
 
   function setMeetingData(updated: Meeting) {
     queryClient.setQueryData(['meeting', id], updated)
@@ -154,13 +139,9 @@ export function MeetingDetailPage() {
 
   const addPersonMutation = useMutation({
     mutationFn: (personId: number) => addMeetingPerson(id!, personId),
-    onSuccess: (updated) => {
-      setMeetingData(updated)
-      setPersonQuery('')
-      setPersonError(null)
-    },
+    onSuccess: (updated) => setMeetingData(updated),
     onError: (e) => {
-      if (e instanceof ApiError) setPersonError(e.message)
+      if (e instanceof ApiError) alert(e.message)
     },
   })
 
@@ -487,37 +468,11 @@ export function MeetingDetailPage() {
         </div>
 
         {/* Add person search */}
-        <div className="mt-3 space-y-2">
-          <input
-            value={personQuery}
-            onChange={e => { setPersonQuery(e.target.value); setPersonError(null) }}
-            placeholder="Добавить участника..."
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+        <div className="mt-3">
+          <ParticipantSearch
+            onAdd={(p) => addPersonMutation.mutate(p.id)}
+            existingIds={people.map(p => p.id)}
           />
-          {debouncedPersonQuery && !isSearching && searchResults.length > 0 && (
-            <div className="border rounded-lg divide-y max-h-48 overflow-y-auto">
-              {searchResults.map(p => {
-                const alreadyIn = people.some(mp => mp.id === p.id)
-                return (
-                  <div
-                    key={p.id}
-                    onClick={() => { if (!alreadyIn && !addPersonMutation.isPending) addPersonMutation.mutate(p.id) }}
-                    className={`flex items-center justify-between px-3 py-2 bg-white ${alreadyIn ? 'opacity-50' : 'hover:bg-gray-50 cursor-pointer'}`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{fullName(p)}</p>
-                      {p.info && <p className="text-xs text-gray-500 truncate">{p.info}</p>}
-                    </div>
-                    {alreadyIn && <span className="text-xs text-gray-400 shrink-0 ml-3">В списке</span>}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-          {debouncedPersonQuery && !isSearching && searchResults.length === 0 && (
-            <p className="text-xs text-gray-500 px-1">Никого не найдено</p>
-          )}
-          {personError && <p className="text-xs text-red-500 px-1">{personError}</p>}
         </div>
       </div>
 

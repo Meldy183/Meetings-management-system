@@ -35,7 +35,7 @@ func normaliseName(p *person.Person) {
 }
 
 type Service interface {
-	GetAll(ctx context.Context) ([]person.Person, error)
+	GetAll(ctx context.Context, order string) ([]person.Person, error)
 	Search(ctx context.Context, q string) ([]person.Person, error)
 	GetByID(ctx context.Context, id int) (*person.Person, error)
 	SortByIDs(ctx context.Context, ids []int) ([]int, error)
@@ -52,10 +52,10 @@ func New(repo person.Repository) Service {
 	return &service{repo: repo}
 }
 
-func (s *service) GetAll(ctx context.Context) ([]person.Person, error) {
+func (s *service) GetAll(ctx context.Context, order string) ([]person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "service: get all people")
-	return s.repo.GetAll(ctx)
+	log.Info(ctx, "service: get all people", zap.String("order", order))
+	return s.repo.GetAll(ctx, order)
 }
 
 func (s *service) Search(ctx context.Context, q string) ([]person.Person, error) {
@@ -63,7 +63,7 @@ func (s *service) Search(ctx context.Context, q string) ([]person.Person, error)
 	log.Info(ctx, "service: search people", zap.String("q", q))
 	words := strings.Fields(strings.ToLower(strings.TrimSpace(q)))
 	if len(words) == 0 {
-		return s.repo.GetAll(ctx)
+		return s.repo.GetAll(ctx, "alpha")
 	}
 	return s.repo.Search(ctx, words)
 }

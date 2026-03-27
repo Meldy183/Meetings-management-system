@@ -11,7 +11,7 @@ type Person struct {
 }
 
 type Repository interface {
-	GetAll(ctx context.Context) ([]Person, error)
+	GetAll(ctx context.Context, order string) ([]Person, error)
 	Search(ctx context.Context, words []string) ([]Person, error)
 	GetByID(ctx context.Context, id int) (*Person, error)
 	GetByIDs(ctx context.Context, ids []int) ([]Person, error)

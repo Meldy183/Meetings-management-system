@@ -71,18 +71,18 @@ func (mr *MockPersonServiceMockRecorder) Delete(ctx, id any) *gomock.Call {
 }
 
 // GetAll mocks base method.
-func (m *MockPersonService) GetAll(ctx context.Context) ([]person.Person, error) {
+func (m *MockPersonService) GetAll(ctx context.Context, order string) ([]person.Person, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAll", ctx)
+	ret := m.ctrl.Call(m, "GetAll", ctx, order)
 	ret0, _ := ret[0].([]person.Person)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAll indicates an expected call of GetAll.
-func (mr *MockPersonServiceMockRecorder) GetAll(ctx any) *gomock.Call {
+func (mr *MockPersonServiceMockRecorder) GetAll(ctx, order any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockPersonService)(nil).GetAll), ctx)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockPersonService)(nil).GetAll), ctx, order)
 }
 
 // GetByID mocks base method.

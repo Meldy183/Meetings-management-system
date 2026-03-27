@@ -97,7 +97,7 @@ func (e *ErrMeetingIncomplete) Error() string {
 // --- service interface ---
 
 type Service interface {
-	GetAll(ctx context.Context, limit, offset int) ([]domMeeting.Meeting, int, error)
+	GetAll(ctx context.Context, limit, offset int, status string) ([]domMeeting.Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*domMeeting.Meeting, error)
 	Create(ctx context.Context, req *CreateRequest) (*domMeeting.Meeting, error)
 	Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error)
@@ -124,10 +124,10 @@ func New(repo domMeeting.Repository, personRepo person.Repository) Service {
 	return &service{repo: repo, personRepo: personRepo}
 }
 
-func (s *service) GetAll(ctx context.Context, limit, offset int) ([]domMeeting.Meeting, int, error) {
+func (s *service) GetAll(ctx context.Context, limit, offset int, status string) ([]domMeeting.Meeting, int, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "service: list meetings", zap.Int("limit", limit), zap.Int("offset", offset))
-	return s.repo.GetAll(ctx, limit, offset)
+	log.Info(ctx, "service: list meetings", zap.Int("limit", limit), zap.Int("offset", offset), zap.String("status", status))
+	return s.repo.GetAll(ctx, limit, offset, status)
 }
 
 func (s *service) GetByID(ctx context.Context, id string) (*domMeeting.Meeting, error) {

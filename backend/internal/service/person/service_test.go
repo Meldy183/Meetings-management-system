@@ -24,7 +24,7 @@ func TestSearch_EmptyQuery_CallsGetAll(t *testing.T) {
 	ctx := testutil.Ctx()
 
 	want := []person.Person{{ID: 1, LastName: "Иванов", FirstName: "Иван"}}
-	repo.EXPECT().GetAll(ctx).Return(want, nil)
+	repo.EXPECT().GetAll(ctx, "alpha").Return(want, nil)
 
 	got, err := svc.Search(ctx, "")
 	if err != nil {
@@ -39,7 +39,7 @@ func TestSearch_WhitespaceOnly_CallsGetAll(t *testing.T) {
 	repo, svc := setup(t)
 	ctx := testutil.Ctx()
 
-	repo.EXPECT().GetAll(ctx).Return(nil, nil)
+	repo.EXPECT().GetAll(ctx, "alpha").Return(nil, nil)
 	_, err := svc.Search(ctx, "   ")
 	if err != nil {
 		t.Fatal(err)
@@ -74,9 +74,9 @@ func TestGetAll_Delegates(t *testing.T) {
 	ctx := testutil.Ctx()
 
 	want := []person.Person{{ID: 5}}
-	repo.EXPECT().GetAll(ctx).Return(want, nil)
+	repo.EXPECT().GetAll(ctx, "alpha").Return(want, nil)
 
-	got, err := svc.GetAll(ctx)
+	got, err := svc.GetAll(ctx, "alpha")
 	if err != nil || len(got) != 1 || got[0].ID != 5 {
 		t.Errorf("unexpected: %v, %v", got, err)
 	}

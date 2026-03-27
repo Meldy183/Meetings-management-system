@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -38,10 +39,6 @@ type UpdatePersonArgs struct {
 	Info       *string `json:"info,omitempty"`
 }
 
-type DeletePersonArgs struct {
-	ID int `json:"id"`
-}
-
 type SortPeopleArgs struct {
 	IDs []int `json:"ids"`
 }
@@ -49,8 +46,9 @@ type SortPeopleArgs struct {
 // --- Meetings ---
 
 type ListMeetingsArgs struct {
-	Limit  int `json:"limit,omitempty"`
-	Offset int `json:"offset,omitempty"`
+	Limit  int    `json:"limit,omitempty"`
+	Offset int    `json:"offset,omitempty"`
+	Status string `json:"status,omitempty"`
 }
 
 type CreateMeetingArgs struct {
@@ -68,10 +66,6 @@ type UpdateMeetingArgs struct {
 	Title string  `json:"title"`
 	Date  string  `json:"date"`
 	Place *string `json:"place,omitempty"`
-}
-
-type DeleteMeetingArgs struct {
-	ID string `json:"id"`
 }
 
 type GetMeetingMetaArgs struct {
@@ -183,9 +177,17 @@ func main() {
 	}
 
 	token := os.Getenv("MEETING_API_TOKEN")
+	if token == "" {
+		token = "admin"
+	}
 	client := &http.Client{Timeout: 60 * time.Second}
 
 	switch command {
+
+	// ── System ──────────────────────────────────────────────
+
+	case "health":
+		doHTTP(client, http.MethodGet, baseURL+"/health", nil, token)
 
 	// ── People ──────────────────────────────────────────────
 
@@ -194,11 +196,11 @@ func main() {
 		if err := json.Unmarshal([]byte(payloadStr), &args); err != nil {
 			fatalf("JSON parse error: %v\n", err)
 		}
-		url := baseURL + "/people"
+		u := baseURL + "/people"
 		if args.Q != "" {
-			url += "?q=" + args.Q
+			u += "?q=" + url.QueryEscape(args.Q)
 		}
-		doHTTP(client, http.MethodGet, url, nil, token)
+		doHTTP(client, http.MethodGet, u, nil, token)
 
 	case "create_person":
 		var args CreatePersonArgs
@@ -236,15 +238,6 @@ func main() {
 		url := fmt.Sprintf("%s/people/%d", baseURL, args.ID)
 		doHTTP(client, http.MethodPatch, url, body, token)
 
-	case "delete_person":
-		var args DeletePersonArgs
-		mustUnmarshal(payloadStr, &args)
-		if args.ID <= 0 {
-			fatalf("Validation error: id must be > 0\n")
-		}
-		url := fmt.Sprintf("%s/people/%d", baseURL, args.ID)
-		doHTTP(client, http.MethodDelete, url, nil, token)
-
 	case "sort_people":
 		var args SortPeopleArgs
 		mustUnmarshal(payloadStr, &args)
@@ -265,6 +258,9 @@ func main() {
 			args.Limit = 20
 		}
 		url := fmt.Sprintf("%s/meetings?limit=%d&offset=%d", baseURL, args.Limit, args.Offset)
+		if args.Status != "" {
+			url += "&status=" + args.Status
+		}
 		doHTTP(client, http.MethodGet, url, nil, token)
 
 	case "create_meeting":
@@ -296,14 +292,6 @@ func main() {
 			Place *string `json:"place,omitempty"`
 		}{args.Title, args.Date, args.Place})
 		doHTTP(client, http.MethodPatch, baseURL+"/meetings/"+args.ID, body, token)
-
-	case "delete_meeting":
-		var args DeleteMeetingArgs
-		mustUnmarshal(payloadStr, &args)
-		if args.ID == "" {
-			fatalf("Validation error: id is required\n")
-		}
-		doHTTP(client, http.MethodDelete, baseURL+"/meetings/"+args.ID, nil, token)
 
 	case "get_meeting_meta":
 		var args GetMeetingMetaArgs
@@ -558,24 +546,25 @@ func printUsage() {
 
 Environment variables:
   MEETING_API_BASE_URL  (default: http://localhost:8081)
-  MEETING_API_TOKEN     (optional Bearer token)
+  MEETING_API_TOKEN     (required — API key, must match API_KEY set on the backend)
 
 Commands & example payloads:
+
+  ── System ──
+  health                '{}'
 
   ── People ──
   list_people           '{"q":"Иванов"}'
   create_person         '{"last_name":"Иванов","first_name":"Иван","middle_name":"Иванович","info":"Директор"}'
   get_person            '{"id":42}'
   update_person         '{"id":42,"last_name":"Иванов","first_name":"Иван","info":"Новая должность"}'
-  delete_person         '{"id":42}'
   sort_people           '{"ids":[17,5,42]}'
 
   ── Meetings ──
-  list_meetings         '{"limit":20,"offset":0}'
+  list_meetings         '{"limit":20,"offset":0,"status":"complete"}'
   create_meeting        '{"title":"Совещание по ИИ","date":"2026-02-26T11:00:00Z","place":"Москва"}'
   get_meeting           '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
   update_meeting        '{"id":"<uuid>","title":"Новое название","date":"2026-03-01T10:00:00Z"}'
-  delete_meeting        '{"id":"<uuid>"}'
   get_meeting_meta      '{"id":"<uuid>"}'
 
   ── Meeting People ──

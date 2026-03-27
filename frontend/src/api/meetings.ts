@@ -1,8 +1,10 @@
 import { apiFetch, BASE_URL } from './client'
 import type { Meeting, MeetingCreate, MeetingList } from './types'
 
-export function getMeetings(limit = 20, offset = 0): Promise<MeetingList> {
-  return apiFetch<MeetingList>(`/meetings?limit=${limit}&offset=${offset}`)
+export function getMeetings(limit = 20, offset = 0, status = ''): Promise<MeetingList> {
+  const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+  if (status) params.set('status', status)
+  return apiFetch<MeetingList>(`/meetings?${params}`)
 }
 
 export function createMeeting(data: MeetingCreate): Promise<Meeting> {

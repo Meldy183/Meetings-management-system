@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getPeople, createPerson, updatePerson, deletePerson } from '../api/people'
 import { ApiError } from '../api/client'
@@ -10,6 +9,7 @@ export function ParticipantsPage() {
   const queryClient = useQueryClient()
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  const [order, setOrder] = useState<'alpha' | 'id'>('alpha')
   const [editingId, setEditingId] = useState<number | null>(null)
   const [showAddForm, setShowAddForm] = useState(false)
 
@@ -19,8 +19,8 @@ export function ParticipantsPage() {
   }, [query])
 
   const { data: all = [], isLoading, isError } = useQuery({
-    queryKey: ['people', debouncedQuery],
-    queryFn: () => getPeople(debouncedQuery || undefined),
+    queryKey: ['people', debouncedQuery, order],
+    queryFn: () => getPeople(debouncedQuery || undefined, debouncedQuery ? undefined : order),
   })
 
   const updateMutation = useMutation({
@@ -62,9 +62,14 @@ export function ParticipantsPage() {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <Link to="/" className="text-gray-400 hover:text-gray-600">←</Link>
-        <h1 className="text-xl font-semibold text-gray-900">Участники</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-semibold text-gray-900">Реестр</h1>
+        <button
+          onClick={() => setOrder(o => o === 'alpha' ? 'id' : 'alpha')}
+          className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 bg-white hover:bg-gray-50"
+        >
+          {order === 'alpha' ? 'По алфавиту' : 'По порядку'}
+        </button>
       </div>
 
       <input

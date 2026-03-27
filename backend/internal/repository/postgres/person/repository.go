@@ -25,7 +25,12 @@ const (
 	queryGetAll = `
 		SELECT id, last_name, first_name, middle_name, info
 		FROM participants
-		ORDER BY last_name, first_name`
+		ORDER BY last_name, first_name, middle_name`
+
+	queryGetAllByID = `
+		SELECT id, last_name, first_name, middle_name, info
+		FROM participants
+		ORDER BY id`
 
 	queryGetByID = `
 		SELECT id, last_name, first_name, middle_name, info
@@ -80,11 +85,15 @@ func (r *repository) Create(ctx context.Context, p *person.Person) (*person.Pers
 	return p, nil
 }
 
-func (r *repository) GetAll(ctx context.Context) ([]person.Person, error) {
+func (r *repository) GetAll(ctx context.Context, order string) ([]person.Person, error) {
 	log := logger.FromContext(ctx)
-	log.Info(ctx, "repo: get all people")
+	log.Info(ctx, "repo: get all people", zap.String("order", order))
 
-	rows, err := r.db.Query(ctx, queryGetAll)
+	q := queryGetAll
+	if order == "id" {
+		q = queryGetAllByID
+	}
+	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		log.Error(ctx, "repo: failed to get all people", zap.Error(err))
 		return nil, err

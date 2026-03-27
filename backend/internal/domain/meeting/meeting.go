@@ -32,7 +32,7 @@ func (m *Meeting) Status() string {
 }
 
 type Repository interface {
-	GetAll(ctx context.Context, limit, offset int) ([]Meeting, int, error)
+	GetAll(ctx context.Context, limit, offset int, status string) ([]Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*Meeting, error)
 	Create(ctx context.Context, m *Meeting) (*Meeting, error)
 	Update(ctx context.Context, id string, title string, date time.Time, place string) error

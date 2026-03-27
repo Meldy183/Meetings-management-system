@@ -129,9 +129,9 @@ func (mr *MockMeetingRepositoryMockRecorder) DeleteAgendaItem(ctx, meetingID, it
 }
 
 // GetAll mocks base method.
-func (m *MockMeetingRepository) GetAll(ctx context.Context, limit, offset int) ([]meeting.Meeting, int, error) {
+func (m *MockMeetingRepository) GetAll(ctx context.Context, limit, offset int, status string) ([]meeting.Meeting, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAll", ctx, limit, offset)
+	ret := m.ctrl.Call(m, "GetAll", ctx, limit, offset, status)
 	ret0, _ := ret[0].([]meeting.Meeting)
 	ret1, _ := ret[1].(int)
 	ret2, _ := ret[2].(error)
@@ -139,9 +139,9 @@ func (m *MockMeetingRepository) GetAll(ctx context.Context, limit, offset int) (
 }
 
 // GetAll indicates an expected call of GetAll.
-func (mr *MockMeetingRepositoryMockRecorder) GetAll(ctx, limit, offset any) *gomock.Call {
+func (mr *MockMeetingRepositoryMockRecorder) GetAll(ctx, limit, offset, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockMeetingRepository)(nil).GetAll), ctx, limit, offset)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAll", reflect.TypeOf((*MockMeetingRepository)(nil).GetAll), ctx, limit, offset, status)
 }
 
 // GetByID mocks base method.

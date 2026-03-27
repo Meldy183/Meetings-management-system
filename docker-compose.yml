@@ -77,21 +77,11 @@ services:
       DATABASE_URL: postgres://meetings:meetings@db:5432/meetings_editor?sslmode=disable
       PORT: 8080
       ENV: prod
+      # Auth — override these in production via a .env file or CI secrets
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      API_KEY: ${API_KEY:-admin}
 
-  # 4. MCP server — exposes all API endpoints as MCP tools for AI agents
-  mcp:
-    build:
-      context: ./mcp
-      dockerfile: Dockerfile
-    depends_on:
-      - backend
-    environment:
-      BACKEND_URL: http://backend:8080
-      MCP_ADDR: ":3000"
-    ports:
-      - "3000:3000"
-
-  # 5. Console REPL — interactive client (run with: docker compose run --rm console)
+  # 4. Console REPL — interactive client (run with: docker compose run --rm console)
   console:
     profiles: [console]
     build:
@@ -100,11 +90,12 @@ services:
     depends_on:
       - backend
     environment:
-      BACKEND_URL: http://backend:8080
+      MEETING_API_BASE_URL: http://backend:8080
+      MEETING_API_TOKEN: ${API_KEY:-admin}
     stdin_open: true
     tty: true
 
-  # 6. React frontend (nginx)
+  # 5. React frontend (nginx)
   frontend:
     build:
       context: ./frontend

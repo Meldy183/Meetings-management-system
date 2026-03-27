@@ -1,7 +1,7 @@
 import { useReducer, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { createMeeting, addMeetingPerson, reorderPeople, setChairperson, addAgendaItem } from '../api/meetings'
+import { createMeeting, updateMeeting, addMeetingPerson, reorderPeople, setChairperson, addAgendaItem } from '../api/meetings'
 import { updatePerson, sortPeople } from '../api/people'
 import { ParticipantSearch } from '../components/ParticipantSearch'
 import { ParticipantCard } from '../components/ParticipantCard'
@@ -101,6 +101,9 @@ export function CreateMeetingPage() {
   const dragIndexRef = useRef<number | null>(null)
   const s5Ref = useRef<{ ctx: string; from: number } | null>(null)
   const [s5Over, setS5Over] = useState<{ ctx: string; idx: number } | null>(null)
+  const [meetingId, setMeetingId] = useState<string | null>(null)
+  const [isCreatingDraft, setIsCreatingDraft] = useState(false)
+  const [step1Error, setStep1Error] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -115,26 +118,23 @@ export function CreateMeetingPage() {
   })
 
   async function handleSubmit() {
+    if (!meetingId) return
     setIsSubmitting(true)
     setSubmitError(null)
     try {
-      const meeting = await createMeeting({
-        title: state.title,
-        date: state.date + ':00.000Z',
-        ...(state.place ? { place: state.place } : {}),
-      })
       for (const p of state.people) {
-        await addMeetingPerson(meeting.id, p.id)
+        await addMeetingPerson(meetingId, p.id)
       }
-      await reorderPeople(meeting.id, state.people.map(p => p.id))
+      await reorderPeople(meetingId, state.people.map(p => p.id))
       if (state.chairperson_id !== null) {
-        await setChairperson(meeting.id, state.chairperson_id)
+        await setChairperson(meetingId, state.chairperson_id)
       }
       for (const item of state.agenda_items) {
-        await addAgendaItem(meeting.id, { text: item.text, speaker_ids: item.speaker_ids })
+        await addAgendaItem(meetingId, { text: item.text, speaker_ids: item.speaker_ids })
       }
       queryClient.invalidateQueries({ queryKey: ['meetings'] })
-      navigate(`/meetings/${meeting.id}`)
+      queryClient.invalidateQueries({ queryKey: ['drafts'] })
+      navigate(`/meetings/${meetingId}`)
     } catch {
       setSubmitError('Ошибка создания совещания. Попробуйте снова.')
     } finally {
@@ -274,15 +274,34 @@ export function CreateMeetingPage() {
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
             />
           </div>
+          {step1Error && <p className="text-sm text-red-500">{step1Error}</p>}
           <button
-            disabled={!canProceedStep1}
-            onClick={() => {
-              dispatch({ type: 'SET_TITLE_DATE', title: titleInput.trim(), date: `${dateInput}T${timeInput}`, place: placeInput.trim() })
-              goNext()
+            disabled={!canProceedStep1 || isCreatingDraft}
+            onClick={async () => {
+              setStep1Error(null)
+              setIsCreatingDraft(true)
+              try {
+                const title = titleInput.trim()
+                const date = `${dateInput}T${timeInput}:00.000Z`
+                const place = placeInput.trim()
+                if (meetingId === null) {
+                  const meeting = await createMeeting({ title, date, ...(place ? { place } : {}) })
+                  setMeetingId(meeting.id)
+                } else {
+                  await updateMeeting(meetingId, { title, date, ...(place ? { place } : {}) })
+                }
+                dispatch({ type: 'SET_TITLE_DATE', title, date: `${dateInput}T${timeInput}`, place })
+                queryClient.invalidateQueries({ queryKey: ['drafts'] })
+                goNext()
+              } catch {
+                setStep1Error('Ошибка сохранения. Попробуйте снова.')
+              } finally {
+                setIsCreatingDraft(false)
+              }
             }}
             className="w-full bg-green-600 text-white py-3 rounded-lg font-medium text-sm hover:bg-green-700 disabled:opacity-50"
           >
-            Далее →
+            {isCreatingDraft ? 'Сохранение...' : 'Далее →'}
           </button>
         </div>
       )}

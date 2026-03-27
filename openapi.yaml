@@ -5,7 +5,9 @@ info:
   description: >
     REST API for the Meetings Management System.
     Provides person lookup, meeting creation, and .docx export.
-    Authentication is not required in the current backend version.
+    All endpoints except /health, POST /auth/login, and POST /auth/logout require authentication.
+    Browser clients use a JWT session cookie (set by POST /auth/login).
+    Programmatic clients use an API key via Authorization: Bearer <key>.
   version: 1.0.0
 
 servers:
@@ -15,6 +17,8 @@ servers:
     description: Direct backend (for local go run, without nginx)
 
 tags:
+  - name: auth
+    description: Authentication — login and logout
   - name: system
     description: Service endpoints
   - name: people
@@ -22,7 +26,55 @@ tags:
   - name: meetings
     description: Meeting management and export
 
+security:
+  - cookieAuth: []
+  - apiKeyAuth: []
+
 paths:
+  /auth/login:
+    post:
+      tags:
+        - auth
+      summary: Log in
+      description: >
+        Validates username and password. On success sets a `session` httpOnly cookie
+        containing a signed JWT (1 hour expiry). The cookie is automatically sent by
+        browsers on subsequent requests.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                  example: admin
+                password:
+                  type: string
+                  format: password
+                  example: changeme
+      responses:
+        '200':
+          description: Login successful — session cookie set
+        '400':
+          description: Invalid request body
+        '401':
+          description: Wrong username or password
+
+  /auth/logout:
+    post:
+      tags:
+        - auth
+      summary: Log out
+      description: Clears the session cookie.
+      security: []
+      responses:
+        '200':
+          description: Logged out — session cookie cleared
+
   /health:
     get:
       tags:
@@ -298,6 +350,14 @@ paths:
             minimum: 0
             default: 0
           example: 0
+        - name: status
+          in: query
+          required: false
+          description: Filter by meeting status. Omit to return all meetings.
+          schema:
+            type: string
+            enum: [complete, incomplete]
+          example: complete
       responses:
         '200':
           description: List of meetings
@@ -1706,3 +1766,13 @@ components:
           type: string
           description: Human-readable error summary
           example: title and date are required
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: JWT session cookie set by POST /auth/login (1 hour expiry)
+    apiKeyAuth:
+      type: http
+      scheme: bearer
+      description: Static API key configured via API_KEY env var on the backend

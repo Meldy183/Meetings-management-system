@@ -126,7 +126,7 @@ func TestMeetingRepo_GetAll_Pagination(t *testing.T) {
 		seedMeeting(t, repo, "m")
 	}
 
-	meetings, total, err := repo.GetAll(ctx, 2, 0)
+	meetings, total, err := repo.GetAll(ctx, 2, 0, "")
 	if err != nil {
 		t.Fatalf("GetAll: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestMeetingRepo_GetAll_Pagination(t *testing.T) {
 		t.Errorf("want 2 items (limit), got %d", len(meetings))
 	}
 
-	page2, _, _ := repo.GetAll(ctx, 2, 2)
+	page2, _, _ := repo.GetAll(ctx, 2, 2, "")
 	if len(page2) != 1 {
 		t.Errorf("want 1 item on page 2, got %d", len(page2))
 	}

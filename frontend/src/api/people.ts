@@ -1,9 +1,12 @@
 import { apiFetch } from './client'
 import type { Person, PersonCreate } from './types'
 
-export function getPeople(q?: string): Promise<Person[]> {
-  const url = q ? `/people?q=${encodeURIComponent(q)}` : '/people'
-  return apiFetch<Person[]>(url)
+export function getPeople(q?: string, order?: string): Promise<Person[]> {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  if (order) params.set('order', order)
+  const qs = params.toString()
+  return apiFetch<Person[]>(qs ? `/people?${qs}` : '/people')
 }
 
 export function getPersonById(id: number): Promise<Person> {

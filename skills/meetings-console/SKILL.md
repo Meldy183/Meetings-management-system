@@ -22,6 +22,8 @@ You interact with the Meetings Editor system through an interactive console clie
 docker compose run --rm console
 ```
 
+The console requires the `MEETING_API_TOKEN` env var to be set (must match the `API_KEY` configured on the backend). In Docker Compose this is injected automatically — no manual step needed.
+
 The console prints a banner and a `> ` prompt. Send one command per line.
 
 To exit: `quit` or `exit`.

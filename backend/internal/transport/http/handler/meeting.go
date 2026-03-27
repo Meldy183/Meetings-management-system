@@ -29,7 +29,7 @@ func NewMeetingHandler(svc svcMeeting.Service, export ExportService) *MeetingHan
 	return &MeetingHandler{svc: svc, export: export}
 }
 
-// GET /meetings?limit=20&offset=0
+// GET /meetings?limit=20&offset=0&status=complete
 func (h *MeetingHandler) List(w http.ResponseWriter, r *http.Request) {
 	limit := queryInt(r, "limit", 20)
 	offset := queryInt(r, "offset", 0)
@@ -44,7 +44,13 @@ func (h *MeetingHandler) List(w http.ResponseWriter, r *http.Request) {
 		offset = 0
 	}
 
-	meetings, total, err := h.svc.GetAll(r.Context(), limit, offset)
+	status := r.URL.Query().Get("status")
+	if status != "" && status != "complete" && status != "incomplete" {
+		respondError(w, http.StatusBadRequest, "status must be 'complete' or 'incomplete'", nil)
+		return
+	}
+
+	meetings, total, err := h.svc.GetAll(r.Context(), limit, offset, status)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return

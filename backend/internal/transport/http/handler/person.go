@@ -21,14 +21,18 @@ func NewPersonHandler(svc svcPerson.Service) *PersonHandler {
 	return &PersonHandler{svc: svc}
 }
 
-// GET /people?q=...
+// GET /people?q=...&order=alpha|id
 func (h *PersonHandler) List(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	order := r.URL.Query().Get("order")
+	if order != "id" {
+		order = "alpha"
+	}
 
 	var people []person.Person
 	var err error
 	if q == "" {
-		people, err = h.svc.GetAll(r.Context())
+		people, err = h.svc.GetAll(r.Context(), order)
 	} else {
 		people, err = h.svc.Search(r.Context(), q)
 	}
