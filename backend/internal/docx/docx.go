@@ -23,14 +23,15 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("ПОВЕСТКА", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
-	chairName := ""
+	header := tnrBold("ПОВЕСТКА", 28) +
+		lineBreak() + tnrBold(lcFirst(m.Title)+" под председательством ", 28)
 	if m.Chairperson != nil {
-		chairName = shortName(*m.Chairperson)
+		if m.Chairperson.Info != "" {
+			header += lineBreak() + tnrBold(m.Chairperson.Info, 28)
+		}
+		header += lineBreak() + tnrBold(shortName(*m.Chairperson), 28)
 	}
-	body.WriteString(para(pPrCenter() + tnr(chairName, 28)))
+	body.WriteString(para(pPrCenter() + header))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
 		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
@@ -60,20 +61,30 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 	var body strings.Builder
 
 	// Title block
-	body.WriteString(para(pPrCenter() + tnrBold("СПИСОК УЧАСТНИКОВ", 28)))
-	body.WriteString(para(pPrCenter() + tnrBold(m.Title, 28)))
-	body.WriteString(para(pPrCenter() + tnr("под председательством", 28)))
-	pChairName := ""
+	pHeader := tnrBold("СПИСОК", 28) +
+		lineBreak() + tnrBold("участников "+lcFirst(m.Title)+" под председательством ", 28)
 	if m.Chairperson != nil {
-		pChairName = shortName(*m.Chairperson)
+		if m.Chairperson.Info != "" {
+			pHeader += lineBreak() + tnrBold(m.Chairperson.Info, 28)
+		}
+		pHeader += lineBreak() + tnrBold(shortName(*m.Chairperson), 28)
 	}
-	body.WriteString(para(pPrCenter() + tnr(pChairName, 28)))
+	body.WriteString(para(pPrCenter() + pHeader))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
 		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
 	}
 	body.WriteString(para(pPrLeft())) // blank line before table
-	body.WriteString(participantsTable(m.People))
+	people := m.People
+	if m.Chairperson != nil {
+		people = make([]person.Person, 0, len(m.People))
+		for _, p := range m.People {
+			if p.ID != m.Chairperson.ID {
+				people = append(people, p)
+			}
+		}
+	}
+	body.WriteString(participantsTable(people))
 
 	return buildDocx(body.String())
 }
@@ -133,6 +144,11 @@ func tnrBoldUnderline(s string, size int) string {
 	)
 }
 
+// lineBreak produces an inline line-break run (w:br inside w:r).
+func lineBreak() string {
+	return `<w:r><w:br/></w:r>`
+}
+
 // tnrCell produces a paragraph suitable for use inside a table cell.
 func tnrCell(s string, size int) string {
 	return `<w:p>` + pPrLeft() + tnr(s, size) + `</w:p>`
@@ -184,7 +200,7 @@ func agendaTable(sp person.Person) string {
     <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
   </w:tr>
-</w:tbl>`, nameCell, tnrCell("–", 28), tnrCell(sp.Info, 28))
+</w:tbl>`, nameCell, tnrCell("—", 28), tnrCell(sp.Info, 28))
 }
 
 // participantsTable renders a borderless 4-column table: № | name | "-" | info.
@@ -206,7 +222,7 @@ func participantsTable(participants []person.Person) string {
 
 	for i, p := range participants {
 		numCell := `<w:p>` + pPrLeft() + tnr(fmt.Sprintf("%d.", i+1), 28) + `</w:p>`
-		dashCell := `<w:p>` + pPrLeft() + tnr("-", 28) + `</w:p>`
+		dashCell := `<w:p>` + pPrLeft() + tnr("—", 28) + `</w:p>`
 		infoCell := `<w:p>` + pPrLeft() + tnr(p.Info, 28) + `</w:p>`
 		sb.WriteString(fmt.Sprintf(`
   <w:tr>
@@ -304,16 +320,19 @@ func fullName(p person.Person) string {
 	return name
 }
 
-// shortName returns "И. О. Фамилия" — initials then full surname.
+// shortName returns "И.О. Фамилия" — initials (no space between them) then full surname.
 func shortName(p person.Person) string {
-	var s string
+	var initials string
 	if r := []rune(p.FirstName); len(r) > 0 {
-		s += string(r[0]) + ". "
+		initials += string(r[0]) + "."
 	}
 	if r := []rune(p.MiddleName); len(r) > 0 {
-		s += string(r[0]) + ". "
+		initials += string(r[0]) + "."
 	}
-	return strings.TrimSpace(s + p.LastName)
+	if initials == "" {
+		return p.LastName
+	}
+	return initials + " " + p.LastName
 }
 
 func formatDate(t time.Time) string {
@@ -323,6 +342,16 @@ func formatDate(t time.Time) string {
 	}
 	return fmt.Sprintf("%d %s %d г., %02d:%02d",
 		t.Day(), months[t.Month()-1], t.Year(), t.Hour(), t.Minute())
+}
+
+// lcFirst lowercases the first rune of s, leaving the rest unchanged.
+func lcFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	r[0] = []rune(strings.ToLower(string(r[0])))[0]
+	return string(r)
 }
 
 func xmlEscape(s string) string {
