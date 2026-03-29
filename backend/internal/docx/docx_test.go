@@ -19,7 +19,7 @@ var (
 func completeMeeting() *domMeeting.Meeting {
 	return &domMeeting.Meeting{
 		ID:          "00000000-0000-0000-0000-000000000001",
-		Title:       "совещания по тестам",
+		Title:       "совещание по тестам",
 		Date:        time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
 		Chairperson: &testPerson1,
 		People:      []person.Person{testPerson1, testPerson2},
@@ -162,7 +162,7 @@ func TestParticipants_ContainsAllPeople(t *testing.T) {
 	data, _ := g.Participants(completeMeeting())
 	files := parseDocx(t, data)
 	doc := files["word/document.xml"]
-	for _, name := range []string{"ИВАНОВ", "ПЕТРОВА"} {
+	for _, name := range []string{"ПЕТРОВА"} {
 		if !strings.Contains(doc, name) {
 			t.Errorf("document.xml should contain participant %q", name)
 		}

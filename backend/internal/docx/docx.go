@@ -24,12 +24,12 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	header := tnrBold("ПОВЕСТКА", 28) +
-		lineBreak() + tnrBold(lcFirst(m.Title)+" под председательством ", 28)
+		lineBreak() + tnrBold(genitiveFirstWord(lcFirst(m.Title))+" под председательством ", 28)
 	if m.Chairperson != nil {
 		if m.Chairperson.Info != "" {
-			header += lineBreak() + tnrBold(m.Chairperson.Info, 28)
+			header += lineBreak() + tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
 		}
-		header += lineBreak() + tnrBold(shortName(*m.Chairperson), 28)
+		header += lineBreak() + tnrBold(shortNameGenitive(*m.Chairperson), 28)
 	}
 	body.WriteString(para(pPrCenter() + header))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
@@ -62,12 +62,12 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 
 	// Title block
 	pHeader := tnrBold("СПИСОК", 28) +
-		lineBreak() + tnrBold("участников "+lcFirst(m.Title)+" под председательством ", 28)
+		lineBreak() + tnrBold("участников "+genitiveFirstWord(lcFirst(m.Title))+" под председательством ", 28)
 	if m.Chairperson != nil {
 		if m.Chairperson.Info != "" {
-			pHeader += lineBreak() + tnrBold(m.Chairperson.Info, 28)
+			pHeader += lineBreak() + tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
 		}
-		pHeader += lineBreak() + tnrBold(shortName(*m.Chairperson), 28)
+		pHeader += lineBreak() + tnrBold(shortNameGenitive(*m.Chairperson), 28)
 	}
 	body.WriteString(para(pPrCenter() + pHeader))
 	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
@@ -342,6 +342,131 @@ func formatDate(t time.Time) string {
 	}
 	return fmt.Sprintf("%d %s %d г., %02d:%02d",
 		t.Day(), months[t.Month()-1], t.Year(), t.Hour(), t.Minute())
+}
+
+// genitiveWord declines a single Russian word to the genitive case using common suffix rules.
+func genitiveWord(word string) string {
+	r := []rune(word)
+	l := []rune(strings.ToLower(word))
+	n := len(r)
+	if n == 0 {
+		return word
+	}
+	ends := func(suffix string) bool {
+		sr := []rune(suffix)
+		if n < len(sr) {
+			return false
+		}
+		for i, c := range sr {
+			if l[n-len(sr)+i] != c {
+				return false
+			}
+		}
+		return true
+	}
+	cut := func(suffix string) string {
+		return string(r[:n-len([]rune(suffix))])
+	}
+	switch {
+	case ends("ый"):
+		return cut("ый") + "ого" // генеральный → генерального
+	case ends("ий"):
+		return cut("ий") + "его" // старший → старшего
+	case ends("ее"):
+		return cut("ее") + "его" // рабочее → рабочего
+	case ends("ая"):
+		return cut("ая") + "ой" // рабочая → рабочей
+	case ends("ь"):
+		return cut("ь") + "я" // заместитель → заместителя
+	case ends("е"):
+		return cut("е") + "я" // совещание → совещания
+	case ends("и"), ends("у"), ends("о"):
+		return word // indeclinable (временно, etc.)
+	case ends("а"):
+		return cut("а") + "и" // встреча → встречи
+	case ends("я"):
+		return cut("я") + "и" // конференция → конференции
+	default:
+		return word + "а" // consonant: директор → директора
+	}
+}
+
+// genitiveFirstWord declines only the first space-separated word of s to the genitive case.
+func genitiveFirstWord(s string) string {
+	if s == "" {
+		return s
+	}
+	idx := strings.Index(s, " ")
+	if idx == -1 {
+		return genitiveWord(s)
+	}
+	return genitiveWord(s[:idx]) + s[idx:]
+}
+
+// genitiveLastName declines a Russian surname to the genitive case.
+func genitiveLastName(name string) string {
+	r := []rune(name)
+	l := []rune(strings.ToLower(name))
+	n := len(r)
+	if n == 0 {
+		return name
+	}
+	ends := func(suffix string) bool {
+		sr := []rune(suffix)
+		if n < len(sr) {
+			return false
+		}
+		for i, c := range sr {
+			if l[n-len(sr)+i] != c {
+				return false
+			}
+		}
+		return true
+	}
+	cut := func(suffix string) string {
+		return string(r[:n-len([]rune(suffix))])
+	}
+	switch {
+	// Indeclinable plural-adjective surnames: Черных, Седых, Войских
+	case ends("ских"), ends("цких"), ends("зких"), ends("ых"), ends("их"):
+		return name
+	// Adjective masculine: Достоевский → Достоевского
+	case ends("ский"), ends("цкий"), ends("зкий"):
+		return cut("ий") + "ого"
+	// Adjective feminine: Достоевская → Достоевской
+	case ends("ская"), ends("цкая"), ends("зкая"):
+		return cut("ая") + "ой"
+	// Feminine -ова/-ева/-ина/-ына: Иванова → Ивановой
+	case ends("ова"), ends("ева"), ends("ёва"), ends("ина"), ends("ына"):
+		return cut("а") + "ой"
+	// Indeclinable: Шевченко, Данилейко
+	case ends("о"), ends("е"), ends("и"), ends("у"):
+		return name
+	// Other -а: Кулиш→? keep simple rule
+	case ends("а"):
+		return cut("а") + "ы"
+	case ends("я"):
+		return cut("я") + "и"
+	default:
+		// consonant: Иванов→Иванова, Швиндт→Швиндта
+		return name + "а"
+	}
+}
+
+// shortNameGenitive returns "И.О.Фамилии" — initials + surname in genitive case.
+func shortNameGenitive(p person.Person) string {
+	var initials string
+	if r := []rune(p.FirstName); len(r) > 0 {
+		initials += string(r[0]) + "."
+	}
+	if r := []rune(p.MiddleName); len(r) > 0 {
+		initials += string(r[0]) + "."
+	}
+	genLast := genitiveLastName(p.LastName)
+	if initials == "" {
+		return genLast
+	}
+	return initials + " " + genLast
 }
 
 // lcFirst lowercases the first rune of s, leaving the rest unchanged.
