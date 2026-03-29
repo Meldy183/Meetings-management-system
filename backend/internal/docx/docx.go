@@ -27,7 +27,7 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 		lineBreak() + tnrBold(genitiveFirstWord(lcFirst(m.Title))+" под председательством ", 28)
 	if m.Chairperson != nil {
 		if m.Chairperson.Info != "" {
-			header += lineBreak() + tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
+			header += tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
 		}
 		header += lineBreak() + tnrBold(shortNameGenitive(*m.Chairperson), 28)
 	}
@@ -65,7 +65,7 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 		lineBreak() + tnrBold("участников "+genitiveFirstWord(lcFirst(m.Title))+" под председательством ", 28)
 	if m.Chairperson != nil {
 		if m.Chairperson.Info != "" {
-			pHeader += lineBreak() + tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
+			pHeader += tnrBold(genitiveFirstWord(m.Chairperson.Info), 28)
 		}
 		pHeader += lineBreak() + tnrBold(shortNameGenitive(*m.Chairperson), 28)
 	}
@@ -166,7 +166,7 @@ func tnrCellNameSplit(p person.Person, size int) string {
 	return fmt.Sprintf(
 		`<w:p>%s<w:r>%s<w:t>%s</w:t></w:r><w:r>%s<w:br/><w:t>%s</w:t></w:r></w:p>`,
 		pPrLeft(), rProps, xmlEscape(lastName), rProps, xmlEscape(firstMid),
-	)
+	) + para(pPrLeft())
 }
 
 // --- table helpers ---
@@ -182,6 +182,7 @@ func agendaTable(sp person.Person) string {
 		pPrLeft(), nameRProps, xmlEscape(nameParts[0]), nameRProps, xmlEscape(nameParts[1]),
 	)
 
+	emptyPara := para(pPrLeft())
 	return fmt.Sprintf(`
 <w:tbl>
   <w:tblPr>
@@ -196,11 +197,11 @@ func agendaTable(sp person.Person) string {
     </w:tblBorders>
   </w:tblPr>
   <w:tr>
-    <w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="4000" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s%s</w:tc>
     <w:tc><w:tcPr><w:tcW w:w="300" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
-    <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
+    <w:tc><w:tcPr><w:tcW w:w="5054" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s%s</w:tc>
   </w:tr>
-</w:tbl>`, nameCell, tnrCell("—", 28), tnrCell(sp.Info, 28))
+</w:tbl>`, nameCell, emptyPara, tnrCell("—", 28), tnrCell(sp.Info, 28), emptyPara)
 }
 
 // participantsTable renders a borderless 4-column table: № | name | "-" | info.
@@ -221,9 +222,10 @@ func participantsTable(participants []person.Person) string {
   </w:tblPr>`)
 
 	for i, p := range participants {
+		emptyPara := para(pPrLeft())
 		numCell := `<w:p>` + pPrLeft() + tnr(fmt.Sprintf("%d.", i+1), 28) + `</w:p>`
 		dashCell := `<w:p>` + pPrLeft() + tnr("—", 28) + `</w:p>`
-		infoCell := `<w:p>` + pPrLeft() + tnr(p.Info, 28) + `</w:p>`
+		infoCell := `<w:p>` + pPrLeft() + tnr(p.Info, 28) + `</w:p>` + emptyPara
 		sb.WriteString(fmt.Sprintf(`
   <w:tr>
     <w:tc><w:tcPr><w:tcW w:w="566" w:type="dxa"/><w:tcMar><w:top w:w="80" w:type="dxa"/><w:bottom w:w="80" w:type="dxa"/></w:tcMar></w:tcPr>%s</w:tc>
