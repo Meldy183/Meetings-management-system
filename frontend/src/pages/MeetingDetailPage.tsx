@@ -94,11 +94,12 @@ export function MeetingDetailPage() {
     if (meeting) {
       setAgendaItems(meeting.agenda_items)
       setPeople(meeting.people)
-      setTitlePhraseInput(meeting.title_phrase || meeting.title)
+      const lcFirst = (s: string) => s ? s[0].toLowerCase() + s.slice(1) : s
+      setTitlePhraseInput(meeting.title_phrase || lcFirst(meeting.title))
       const chair = meeting.chairperson
+      const defaultChairPhrase = chair ? (chair.info ? chair.info + ' ' : '') + shortName(chair) : ''
       setChairpersonPhraseInput(
-        meeting.chairperson_phrase ||
-        (chair ? (chair.info ? chair.info + ' ' : '') + shortName(chair) : '')
+        meeting.chairperson_phrase || lcFirst(defaultChairPhrase)
       )
     }
   }, [meeting])
