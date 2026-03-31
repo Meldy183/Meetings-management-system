@@ -38,9 +38,9 @@ func (g *Generator) Agenda(m *domMeeting.Meeting) ([]byte, error) {
 		header += lineBreak() + tnrBold(chairPhrase, 28)
 	}
 	body.WriteString(para(pPrCenter() + header))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
+	body.WriteString(para(pPrRightSpaced() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
-		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
+		body.WriteString(para(pPrRightSmallSpaced() + tnr(m.Place, 28)))
 	}
 	body.WriteString(para(pPrLeft())) // blank line between header and agenda items
 
@@ -82,9 +82,9 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 		pHeader += lineBreak() + tnrBold(chairPhrase, 28)
 	}
 	body.WriteString(para(pPrCenter() + pHeader))
-	body.WriteString(para(pPrRight() + tnrBold(formatDate(m.Date), 28)))
+	body.WriteString(para(pPrRightSpaced() + tnrBold(formatDate(m.Date), 28)))
 	if m.Place != "" {
-		body.WriteString(para(pPrRight() + tnr(m.Place, 28)))
+		body.WriteString(para(pPrRightSmallSpaced() + tnr(m.Place, 28)))
 	}
 	body.WriteString(para(pPrLeft())) // blank line before table
 	people := m.People
@@ -115,6 +115,16 @@ func pPrCenter() string {
 // pPrRight returns right-aligned paragraph properties with standard line spacing.
 func pPrRight() string {
 	return `<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="right"/></w:pPr>`
+}
+
+// pPrRightSpaced returns right-aligned paragraph properties with 240-twip spacing above.
+func pPrRightSpaced() string {
+	return `<w:pPr><w:spacing w:before="240" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="right"/></w:pPr>`
+}
+
+// pPrRightSmallSpaced returns right-aligned paragraph properties with 80-twip spacing above.
+func pPrRightSmallSpaced() string {
+	return `<w:pPr><w:spacing w:before="80" w:after="0" w:line="240" w:lineRule="auto"/><w:jc w:val="right"/></w:pPr>`
 }
 
 // pPrLeft returns left-aligned paragraph properties with standard line spacing.
