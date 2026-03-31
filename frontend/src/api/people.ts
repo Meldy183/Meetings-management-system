@@ -1,4 +1,5 @@
-import { apiFetch } from './client'
+import { apiFetch, BASE_URL } from './client'
+import { ApiError } from './client'
 import type { Person, PersonCreate } from './types'
 
 export function getPeople(q?: string, order?: string): Promise<Person[]> {
@@ -30,4 +31,23 @@ export function sortPeople(ids: number[]): Promise<number[]> {
     method: 'POST',
     body: JSON.stringify({ ids }),
   }).then(r => r.ids)
+}
+
+export async function importPeople(file: File): Promise<{ imported: number }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch(`${BASE_URL}/people/import`, {
+    method: 'POST',
+    credentials: 'include',
+    body: form,
+  })
+  if (res.status === 401) {
+    window.location.href = '/login'
+    throw new ApiError(401, {})
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new ApiError(res.status, body)
+  }
+  return res.json()
 }

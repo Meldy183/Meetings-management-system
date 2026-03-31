@@ -7,8 +7,8 @@ import {
   updateMeeting, setChairperson, deleteMeeting,
   addMeetingPerson, removeMeetingPerson,
   addAgendaItem, updateAgendaItem, deleteAgendaItem,
+  sortMeetingPeople,
 } from '../api/meetings'
-import { sortPeople } from '../api/people'
 import { ApiError } from '../api/client'
 import { SpeakerPicker } from '../components/SpeakerPicker'
 import { ParticipantSearch } from '../components/ParticipantSearch'
@@ -42,6 +42,13 @@ function fullName(p: Person) {
   return [p.last_name, p.first_name, p.middle_name].filter(Boolean).join(' ')
 }
 
+function shortName(p: Person) {
+  let initials = ''
+  if (p.first_name) initials += p.first_name[0] + '.'
+  if (p.middle_name) initials += p.middle_name[0] + '.'
+  return initials ? initials + ' ' + p.last_name : p.last_name
+}
+
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -59,6 +66,11 @@ export function MeetingDetailPage() {
   // Edit meeting metadata state
   const [editingMeeting, setEditingMeeting] = useState(false)
   const [meetingForm, setMeetingForm] = useState({ title: '', date: '', place: '' })
+
+  // Phrase fields state
+  const [titlePhraseInput, setTitlePhraseInput] = useState('')
+  const [chairpersonPhraseInput, setChairpersonPhraseInput] = useState('')
+  const [docHeaderSaved, setDocHeaderSaved] = useState(false)
 
   // Chairperson state
   const [editingChairperson, setEditingChairperson] = useState(false)
@@ -82,6 +94,12 @@ export function MeetingDetailPage() {
     if (meeting) {
       setAgendaItems(meeting.agenda_items)
       setPeople(meeting.people)
+      setTitlePhraseInput(meeting.title_phrase || meeting.title)
+      const chair = meeting.chairperson
+      setChairpersonPhraseInput(
+        meeting.chairperson_phrase ||
+        (chair ? (chair.info ? chair.info + ' ' : '') + shortName(chair) : '')
+      )
     }
   }, [meeting])
 
@@ -103,25 +121,26 @@ export function MeetingDetailPage() {
   })
 
   const sortPeopleMutation = useMutation({
-    mutationFn: async () => {
-      const chairId = meeting?.chairperson?.id
-      const nonChair = people.filter(p => p.id !== chairId)
-      const sortedIds = await sortPeople(nonChair.map(p => p.id))
-      return sortedIds
-    },
-    onSuccess: (sortedIds) => {
-      const chairId = meeting?.chairperson?.id
-      const chairPerson = people.find(p => p.id === chairId)
-      const sortedOthers = sortedIds.map(id => people.find(p => p.id === id)!)
-      const allPeople = [...(chairPerson ? [chairPerson] : []), ...sortedOthers]
-      setPeople(allPeople)
-      peopleMutation.mutate(allPeople.map(p => p.id))
-    },
+    mutationFn: () => sortMeetingPeople(id!),
+    onSuccess: (updated) => setMeetingData(updated),
   })
 
   const updateMeetingMutation = useMutation({
     mutationFn: (data: { title: string; date: string; place?: string }) => updateMeeting(id!, data),
     onSuccess: (updated) => { setMeetingData(updated); setEditingMeeting(false) },
+  })
+
+  const updateDocHeaderMutation = useMutation({
+    mutationFn: () => updateMeeting(id!, {
+      title: meeting!.title,
+      date: meeting!.date,
+      place: meeting!.place,
+      title_phrase: titlePhraseInput,
+      chairperson_phrase: chairpersonPhraseInput,
+    }),
+    onSuccess: (updated) => {
+      setMeetingData(updated)
+    },
   })
 
   const setChairpersonMutation = useMutation({
@@ -348,6 +367,49 @@ export function MeetingDetailPage() {
         </div>
       )}
 
+      {/* Document header phrases */}
+      <div className="bg-white border rounded-lg p-4 space-y-3">
+        <h2 className="text-sm font-semibold text-gray-700">Заголовок документа</h2>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Тема <span className="text-gray-400">(«ПОВЕСТКА [тема] под председательством...»)</span></label>
+          <textarea
+            value={titlePhraseInput}
+            onChange={e => setTitlePhraseInput(e.target.value)}
+            rows={2}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+          />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Председательствующий <span className="text-gray-400">(«...под председательством [текст]»)</span></label>
+          <input
+            value={chairpersonPhraseInput}
+            onChange={e => setChairpersonPhraseInput(e.target.value)}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+          />
+        </div>
+        <button
+          disabled={updateDocHeaderMutation.isPending && !docHeaderSaved}
+          onClick={() => {
+            setDocHeaderSaved(true)
+            setTimeout(() => setDocHeaderSaved(false), 2000)
+            updateDocHeaderMutation.mutate()
+          }}
+          className={[
+            'relative w-full py-2 rounded-lg text-sm font-medium disabled:opacity-50 transition-all duration-700 ease-in-out border overflow-hidden',
+            docHeaderSaved
+              ? 'bg-green-100 text-green-700 border-green-300'
+              : 'bg-green-600 text-white border-transparent hover:bg-green-700',
+          ].join(' ')}
+        >
+          <span className={`transition-opacity duration-700 ease-in-out ${docHeaderSaved ? 'opacity-0' : 'opacity-100'}`}>
+            {updateDocHeaderMutation.isPending ? 'Сохранение...' : 'Сохранить заголовок'}
+          </span>
+          <span className={`absolute inset-0 flex items-center justify-center transition-opacity duration-700 ease-in-out ${docHeaderSaved ? 'opacity-100' : 'opacity-0'}`}>
+            ✓ Сохранено
+          </span>
+        </button>
+      </div>
+
       {/* Chairperson */}
       <div>
         <div className="flex items-center justify-between mb-2">
@@ -548,7 +610,7 @@ export function MeetingDetailPage() {
                             className={[
                               'flex items-center gap-1.5 text-xs text-gray-500 rounded px-1 py-0.5 transition-colors cursor-grab active:cursor-grabbing',
                               speakerDragOver?.itemId === item.id && speakerDragOver?.index === si
-                                ? 'bg-blue-50 text-blue-700'
+                                ? 'bg-green-50 text-green-700'
                                 : '',
                             ].join(' ')}
                           >
@@ -616,7 +678,7 @@ export function MeetingDetailPage() {
         ) : (
           <button
             onClick={() => setShowAddItem(true)}
-            className="mt-2 w-full border-2 border-dashed border-gray-300 rounded-lg py-2 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-500"
+            className="mt-2 w-full border-2 border-dashed border-gray-300 rounded-lg py-2 text-sm text-gray-500 hover:border-green-400 hover:text-green-500"
           >
             + Добавить пункт повестки
           </button>

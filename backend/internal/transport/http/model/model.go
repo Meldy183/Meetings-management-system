@@ -34,15 +34,17 @@ type AgendaItemResponse struct {
 }
 
 type MeetingResponse struct {
-	ID          string               `json:"id"`
-	Title       string               `json:"title"`
-	Date        time.Time            `json:"date"`
-	Place       string               `json:"place,omitempty"`
-	Chairperson *PersonResponse      `json:"chairperson"`
-	AgendaItems []AgendaItemResponse `json:"agenda_items"`
-	People      []PersonResponse     `json:"people"`
-	Status      string               `json:"status"`
-	CreatedAt   time.Time            `json:"created_at"`
+	ID                string               `json:"id"`
+	Title             string               `json:"title"`
+	Date              time.Time            `json:"date"`
+	Place             string               `json:"place,omitempty"`
+	TitlePhrase       string               `json:"title_phrase,omitempty"`
+	ChairpersonPhrase string               `json:"chairperson_phrase,omitempty"`
+	Chairperson       *PersonResponse      `json:"chairperson"`
+	AgendaItems       []AgendaItemResponse `json:"agenda_items"`
+	People            []PersonResponse     `json:"people"`
+	Status            string               `json:"status"`
+	CreatedAt         time.Time            `json:"created_at"`
 }
 
 type MeetingSummaryResponse struct {
@@ -71,9 +73,11 @@ type ReorderAgendaItemsRequest struct {
 }
 
 type MeetingUpdateRequest struct {
-	Title string    `json:"title"`
-	Date  time.Time `json:"date"`
-	Place string    `json:"place,omitempty"`
+	Title             string    `json:"title"`
+	Date              time.Time `json:"date"`
+	Place             string    `json:"place,omitempty"`
+	TitlePhrase       string    `json:"title_phrase,omitempty"`
+	ChairpersonPhrase string    `json:"chairperson_phrase,omitempty"`
 }
 
 type SetChairpersonRequest struct {
@@ -103,6 +107,10 @@ type SortPeopleRequest struct {
 
 type SortPeopleResponse struct {
 	IDs []int `json:"ids"`
+}
+
+type ImportPeopleResponse struct {
+	Imported int `json:"imported"`
 }
 
 type ErrorResponse struct {

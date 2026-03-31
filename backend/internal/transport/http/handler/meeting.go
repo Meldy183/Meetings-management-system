@@ -137,9 +137,11 @@ func (h *MeetingHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	m, err := h.svc.Update(r.Context(), id, &svcMeeting.UpdateRequest{
-		Title: req.Title,
-		Date:  req.Date,
-		Place: req.Place,
+		Title:             req.Title,
+		Date:              req.Date,
+		Place:             req.Place,
+		TitlePhrase:       req.TitlePhrase,
+		ChairpersonPhrase: req.ChairpersonPhrase,
 	})
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
@@ -230,6 +232,26 @@ func (h *MeetingHandler) AddPerson(w http.ResponseWriter, r *http.Request) {
 		var e2 *svcMeeting.ErrPersonAlreadyInMeeting
 		if errors.As(err, &e2) {
 			respondError(w, http.StatusConflict, e2.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+// POST /meetings/{id}/people/sort
+func (h *MeetingHandler) SortPeople(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		respondError(w, http.StatusBadRequest, "missing meeting id", nil)
+		return
+	}
+
+	m, err := h.svc.SortPeople(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting not found", nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
@@ -719,14 +741,16 @@ func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
 	}
 
 	return model.MeetingResponse{
-		ID:          m.ID,
-		Title:       m.Title,
-		Date:        m.Date,
-		Place:       m.Place,
-		Chairperson: chairperson,
-		AgendaItems: items,
-		People:      people,
-		Status:      m.Status(),
-		CreatedAt:   m.CreatedAt,
+		ID:                m.ID,
+		Title:             m.Title,
+		Date:              m.Date,
+		Place:             m.Place,
+		TitlePhrase:       m.TitlePhrase,
+		ChairpersonPhrase: m.ChairpersonPhrase,
+		Chairperson:       chairperson,
+		AgendaItems:       items,
+		People:            people,
+		Status:            m.Status(),
+		CreatedAt:         m.CreatedAt,
 	}
 }

@@ -1,11 +1,18 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/extrame/xls"
+	"github.com/xuri/excelize/v2"
 
 	"meetings-editor/internal/domain/person"
 	svcPerson "meetings-editor/internal/service/person"
@@ -91,10 +98,6 @@ func (h *PersonHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	created, err := h.svc.Create(r.Context(), p)
 	if err != nil {
-		if errors.Is(err, errs.ErrConflict) {
-			respondError(w, http.StatusConflict, "person already exists", nil)
-			return
-		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
 		return
 	}
@@ -185,6 +188,130 @@ func (h *PersonHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// POST /people/import
+func (h *PersonHandler) Import(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		respondError(w, http.StatusBadRequest, "failed to parse multipart form", nil)
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "file field required", nil)
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, "failed to read file", nil)
+		return
+	}
+
+	ext := strings.ToLower(filepath.Ext(header.Filename))
+
+	var rows [][]string
+	switch ext {
+	case ".xlsx":
+		rows, err = parseXLSX(data)
+	case ".xls":
+		rows, err = parseXLS(data)
+	default:
+		respondError(w, http.StatusBadRequest, "unsupported file format, use .xlsx or .xls", nil)
+		return
+	}
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "failed to parse file", nil)
+		return
+	}
+
+	imported := 0
+	for _, row := range rows {
+		if len(row) < 2 {
+			continue
+		}
+		lastName := strings.TrimSpace(row[0])
+		firstName := strings.TrimSpace(row[1])
+		if lastName == "" || firstName == "" {
+			continue
+		}
+		middleName := ""
+		if len(row) > 2 {
+			middleName = strings.TrimSpace(row[2])
+		}
+		info := ""
+		if len(row) > 3 {
+			info = strings.TrimSpace(row[3])
+		}
+		p := &person.Person{
+			LastName:   lastName,
+			FirstName:  firstName,
+			MiddleName: middleName,
+			Info:       info,
+		}
+		if _, err := h.svc.Create(r.Context(), p); err != nil {
+			continue
+		}
+		imported++
+	}
+
+	respond(w, http.StatusOK, model.ImportPeopleResponse{Imported: imported})
+}
+
+func parseXLSX(data []byte) ([][]string, error) {
+	f, err := excelize.OpenReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	sheets := f.GetSheetList()
+	if len(sheets) == 0 {
+		return nil, nil
+	}
+	allRows, err := f.GetRows(sheets[0])
+	if err != nil {
+		return nil, err
+	}
+	if len(allRows) <= 1 {
+		return nil, nil
+	}
+	return allRows[1:], nil // skip header row
+}
+
+func parseXLS(data []byte) ([][]string, error) {
+	tmp, err := os.CreateTemp("", "import-*.xls")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		return nil, err
+	}
+	tmp.Close()
+
+	wb, err := xls.Open(tmp.Name(), "utf-8")
+	if err != nil {
+		return nil, err
+	}
+
+	sheet := wb.GetSheet(0)
+	if sheet == nil {
+		return nil, nil
+	}
+
+	var rows [][]string
+	for i := 1; i <= int(sheet.MaxRow); i++ { // skip row 0 (header)
+		row := sheet.Row(i)
+		cols := make([]string, 4)
+		for j := 0; j < 4 && j < int(row.LastCol()); j++ {
+			cols[j] = row.Col(j)
+		}
+		rows = append(rows, cols)
+	}
+	return rows, nil
 }
 
 func toPersonResponse(p *person.Person) model.PersonResponse {

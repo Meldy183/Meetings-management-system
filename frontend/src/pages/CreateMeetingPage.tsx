@@ -156,18 +156,8 @@ export function CreateMeetingPage() {
   async function handleSort() {
     if (state.people.length === 0) return
     try {
-      if (state.chairperson_id !== null) {
-        // Chairperson is pinned at top — sort only the others
-        const chair = state.people.find(p => p.id === state.chairperson_id)
-        const others = state.people.filter(p => p.id !== state.chairperson_id)
-        if (others.length === 0) return
-        const sortedIds = await sortPeople(others.map(p => p.id))
-        const sortedOthers = sortedIds.map(id => others.find(p => p.id === id)!)
-        dispatch({ type: 'REORDER_PEOPLE', people: [...(chair ? [chair] : []), ...sortedOthers] })
-      } else {
-        const sortedIds = await sortPeople(state.people.map(p => p.id))
-        dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
-      }
+      const sortedIds = await sortPeople(state.people.map(p => p.id))
+      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
     } catch { /* ignore */ }
   }
 
@@ -391,11 +381,11 @@ export function CreateMeetingPage() {
                 key={p.id}
                 onClick={() => dispatch({ type: 'SET_CHAIRPERSON', id: p.id })}
                 className={`w-full flex items-center gap-3 p-3 border rounded-lg text-left transition-colors
-                  ${state.chairperson_id === p.id ? 'border-blue-500 bg-blue-50' : 'bg-white hover:bg-gray-50'}`}
+                  ${state.chairperson_id === p.id ? 'border-green-600 bg-green-50' : 'bg-white hover:bg-gray-50'}`}
               >
                 <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0
-                  ${state.chairperson_id === p.id ? 'border-blue-500' : 'border-gray-300'}`}>
-                  {state.chairperson_id === p.id && <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />}
+                  ${state.chairperson_id === p.id ? 'border-green-600' : 'border-gray-300'}`}>
+                  {state.chairperson_id === p.id && <div className="w-2.5 h-2.5 rounded-full bg-green-600" />}
                 </div>
                 <div>
                   <p className="text-sm font-medium">{fullName(p)}</p>

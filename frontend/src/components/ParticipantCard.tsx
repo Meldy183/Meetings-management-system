@@ -25,7 +25,7 @@ export function ParticipantCard({ participant, onRemove, onEdit, badge, dragHand
       </div>
       <div className="flex gap-2 shrink-0">
         {onEdit && (
-          <button onClick={onEdit} className="text-xs text-gray-500 hover:text-blue-600 px-2 py-1 rounded">
+          <button onClick={onEdit} className="text-xs text-gray-500 hover:text-green-600 px-2 py-1 rounded">
             Изменить
           </button>
         )}

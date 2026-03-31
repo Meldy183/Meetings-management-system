@@ -220,6 +220,21 @@ func (mr *MockMeetingServiceMockRecorder) ReorderAgendaItems(ctx, meetingID, age
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReorderAgendaItems", reflect.TypeOf((*MockMeetingService)(nil).ReorderAgendaItems), ctx, meetingID, agendaItemIDs)
 }
 
+// SortPeople mocks base method.
+func (m *MockMeetingService) SortPeople(ctx context.Context, meetingID string) (*meeting.Meeting, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SortPeople", ctx, meetingID)
+	ret0, _ := ret[0].(*meeting.Meeting)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SortPeople indicates an expected call of SortPeople.
+func (mr *MockMeetingServiceMockRecorder) SortPeople(ctx, meetingID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SortPeople", reflect.TypeOf((*MockMeetingService)(nil).SortPeople), ctx, meetingID)
+}
+
 // ReorderPeople mocks base method.
 func (m *MockMeetingService) ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error {
 	m.ctrl.T.Helper()

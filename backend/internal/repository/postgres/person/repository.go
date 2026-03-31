@@ -74,9 +74,6 @@ func (r *repository) Create(ctx context.Context, p *person.Person) (*person.Pers
 
 	err := r.db.QueryRow(ctx, queryCreate, p.LastName, p.FirstName, p.MiddleName, p.Info).Scan(&p.ID)
 	if err != nil {
-		if isPgConflict(err) {
-			return nil, errs.ErrConflict
-		}
 		log.Error(ctx, "repo: failed to create person", zap.Error(err))
 		return nil, err
 	}

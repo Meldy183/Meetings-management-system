@@ -1,0 +1,1 @@
+ALTER TABLE participants DROP CONSTRAINT IF EXISTS participants_last_name_first_name_middle_name_key;

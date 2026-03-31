@@ -244,17 +244,17 @@ func (mr *MockMeetingRepositoryMockRecorder) SetChairperson(ctx, meetingID, pers
 }
 
 // Update mocks base method.
-func (m *MockMeetingRepository) Update(ctx context.Context, id, title string, date time.Time, place string) error {
+func (m *MockMeetingRepository) Update(ctx context.Context, id, title string, date time.Time, place string, titlePhrase string, chairpersonPhrase string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Update", ctx, id, title, date, place)
+	ret := m.ctrl.Call(m, "Update", ctx, id, title, date, place, titlePhrase, chairpersonPhrase)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Update indicates an expected call of Update.
-func (mr *MockMeetingRepositoryMockRecorder) Update(ctx, id, title, date, place any) *gomock.Call {
+func (mr *MockMeetingRepositoryMockRecorder) Update(ctx, id, title, date, place, titlePhrase, chairpersonPhrase any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockMeetingRepository)(nil).Update), ctx, id, title, date, place)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockMeetingRepository)(nil).Update), ctx, id, title, date, place, titlePhrase, chairpersonPhrase)
 }
 
 // UpdateAgendaItem mocks base method.

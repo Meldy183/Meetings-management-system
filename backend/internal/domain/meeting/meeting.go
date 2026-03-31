@@ -13,14 +13,16 @@ type AgendaItem struct {
 }
 
 type Meeting struct {
-	ID          string
-	Title       string
-	Date        time.Time
-	Place       string
-	Chairperson *person.Person // nil when not yet assigned
-	AgendaItems []AgendaItem
-	People      []person.Person
-	CreatedAt   time.Time
+	ID                string
+	Title             string
+	Date              time.Time
+	Place             string
+	TitlePhrase       string // declined title for export headers
+	ChairpersonPhrase string // text after "под председательством " in export headers
+	Chairperson       *person.Person // nil when not yet assigned
+	AgendaItems       []AgendaItem
+	People            []person.Person
+	CreatedAt         time.Time
 }
 
 // Status returns "complete" when chairperson, people, and agenda items are all present.
@@ -35,7 +37,7 @@ type Repository interface {
 	GetAll(ctx context.Context, limit, offset int, status string) ([]Meeting, int, error)
 	GetByID(ctx context.Context, id string) (*Meeting, error)
 	Create(ctx context.Context, m *Meeting) (*Meeting, error)
-	Update(ctx context.Context, id string, title string, date time.Time, place string) error
+	Update(ctx context.Context, id string, title string, date time.Time, place string, titlePhrase string, chairpersonPhrase string) error
 	SetChairperson(ctx context.Context, meetingID string, personID int) error
 	Delete(ctx context.Context, id string) error
 	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error

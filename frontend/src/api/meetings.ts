@@ -15,7 +15,7 @@ export function getMeeting(id: string): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${id}`)
 }
 
-export function updateMeeting(id: string, data: { title: string; date: string; place?: string }): Promise<Meeting> {
+export function updateMeeting(id: string, data: { title: string; date: string; place?: string; title_phrase?: string; chairperson_phrase?: string }): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
 }
 
@@ -39,6 +39,10 @@ export function addMeetingPerson(meetingId: string, personId: number): Promise<M
 
 export function removeMeetingPerson(meetingId: string, personId: number): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${meetingId}/people/${personId}`, { method: 'DELETE' })
+}
+
+export function sortMeetingPeople(meetingId: string): Promise<Meeting> {
+  return apiFetch<Meeting>(`/meetings/${meetingId}/people/sort`, { method: 'POST' })
 }
 
 export function reorderPeople(meetingId: string, personIds: number[]): Promise<void> {

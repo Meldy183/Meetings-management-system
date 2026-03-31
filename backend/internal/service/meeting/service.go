@@ -23,9 +23,11 @@ type CreateRequest struct {
 
 // UpdateRequest is the service-level input for updating meeting metadata.
 type UpdateRequest struct {
-	Title string
-	Date  time.Time
-	Place string
+	Title             string
+	Date              time.Time
+	Place             string
+	TitlePhrase       string
+	ChairpersonPhrase string
 }
 
 // --- error types ---
@@ -103,6 +105,7 @@ type Service interface {
 	Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error)
 	SetChairperson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
 	Delete(ctx context.Context, id string) error
+	SortPeople(ctx context.Context, meetingID string) (*domMeeting.Meeting, error)
 	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
 	AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
@@ -149,7 +152,40 @@ func (s *service) Create(ctx context.Context, req *CreateRequest) (*domMeeting.M
 }
 
 func (s *service) Update(ctx context.Context, meetingID string, req *UpdateRequest) (*domMeeting.Meeting, error) {
-	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date, req.Place); err != nil {
+	if err := s.repo.Update(ctx, meetingID, req.Title, req.Date, req.Place, req.TitlePhrase, req.ChairpersonPhrase); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) SortPeople(ctx context.Context, meetingID string) (*domMeeting.Meeting, error) {
+	m, err := s.repo.GetByID(ctx, meetingID)
+	if err != nil {
+		return nil, err
+	}
+	if len(m.People) == 0 {
+		return m, nil
+	}
+	var chairID int
+	if m.Chairperson != nil {
+		chairID = m.Chairperson.ID
+	}
+	var otherIDs []int
+	for _, p := range m.People {
+		if p.ID != chairID {
+			otherIDs = append(otherIDs, p.ID)
+		}
+	}
+	sortedOthers, err := s.personRepo.SortByIDs(ctx, otherIDs)
+	if err != nil {
+		return nil, err
+	}
+	var ordered []int
+	if m.Chairperson != nil {
+		ordered = append(ordered, chairID)
+	}
+	ordered = append(ordered, sortedOthers...)
+	if err := s.repo.ReorderPeople(ctx, meetingID, ordered); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)

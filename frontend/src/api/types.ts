@@ -47,6 +47,8 @@ export interface Meeting {
   title: string
   date: string
   place?: string
+  title_phrase?: string
+  chairperson_phrase?: string
   chairperson: Person | null
   agenda_items: AgendaItem[]
   people: Person[]

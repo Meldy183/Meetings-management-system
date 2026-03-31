@@ -62,10 +62,12 @@ type GetMeetingArgs struct {
 }
 
 type UpdateMeetingArgs struct {
-	ID    string  `json:"id"`
-	Title string  `json:"title"`
-	Date  string  `json:"date"`
-	Place *string `json:"place,omitempty"`
+	ID                string  `json:"id"`
+	Title             string  `json:"title"`
+	Date              string  `json:"date"`
+	Place             *string `json:"place,omitempty"`
+	TitlePhrase       *string `json:"title_phrase,omitempty"`
+	ChairpersonPhrase *string `json:"chairperson_phrase,omitempty"`
 }
 
 type GetMeetingMetaArgs struct {
@@ -287,10 +289,12 @@ func main() {
 			fatalf("Validation error: id, title, and date are required\n")
 		}
 		body, _ := json.Marshal(struct {
-			Title string  `json:"title"`
-			Date  string  `json:"date"`
-			Place *string `json:"place,omitempty"`
-		}{args.Title, args.Date, args.Place})
+			Title             string  `json:"title"`
+			Date              string  `json:"date"`
+			Place             *string `json:"place,omitempty"`
+			TitlePhrase       *string `json:"title_phrase,omitempty"`
+			ChairpersonPhrase *string `json:"chairperson_phrase,omitempty"`
+		}{args.Title, args.Date, args.Place, args.TitlePhrase, args.ChairpersonPhrase})
 		doHTTP(client, http.MethodPatch, baseURL+"/meetings/"+args.ID, body, token)
 
 	case "get_meeting_meta":
@@ -337,6 +341,16 @@ func main() {
 		}
 		body, _ := json.Marshal(map[string][]int{"person_ids": args.PersonIDs})
 		doHTTP(client, http.MethodPut, baseURL+"/meetings/"+args.MeetingID+"/people/order", body, token)
+
+	case "sort_meeting_people":
+		var args struct {
+			MeetingID string `json:"meeting_id"`
+		}
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" {
+			fatalf("Validation error: meeting_id is required\n")
+		}
+		doHTTP(client, http.MethodPost, baseURL+"/meetings/"+args.MeetingID+"/people/sort", nil, token)
 
 	// ── Chairperson ─────────────────────────────────────────
 
@@ -564,7 +578,7 @@ Commands & example payloads:
   list_meetings         '{"limit":20,"offset":0,"status":"complete"}'
   create_meeting        '{"title":"Совещание по ИИ","date":"2026-02-26T11:00:00Z","place":"Москва"}'
   get_meeting           '{"id":"3fa85f64-5717-4562-b3fc-2c963f66afa6"}'
-  update_meeting        '{"id":"<uuid>","title":"Новое название","date":"2026-03-01T10:00:00Z"}'
+  update_meeting        '{"id":"<uuid>","title":"Новое название","date":"2026-03-01T10:00:00Z","title_phrase":"совещания по...","chairperson_phrase":"заместителя министра А.Н. Швиндта"}'
   get_meeting_meta      '{"id":"<uuid>"}'
 
   ── Meeting People ──
@@ -572,6 +586,7 @@ Commands & example payloads:
   add_meeting_person    '{"meeting_id":"<uuid>","person_id":55}'
   remove_meeting_person '{"meeting_id":"<uuid>","person_id":55}'
   order_meeting_people  '{"meeting_id":"<uuid>","person_ids":[17,42]}'
+  sort_meeting_people   '{"meeting_id":"<uuid>"}'
 
   ── Chairperson ──
   set_chairperson       '{"meeting_id":"<uuid>","person_id":42}'
