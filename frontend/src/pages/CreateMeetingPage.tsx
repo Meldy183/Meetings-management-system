@@ -8,7 +8,8 @@ import { ParticipantCard } from '../components/ParticipantCard'
 import { ParticipantForm } from '../components/ParticipantForm'
 import { StepIndicator } from '../components/StepIndicator'
 import { SpeakerPicker } from '../components/SpeakerPicker'
-import type { Person, PersonCreate } from '../api/types'
+import type { AttendanceMode, MeetingPerson, Person, PersonCreate } from '../api/types'
+import { AttendanceModeToggle } from '../components/AttendanceModeToggle'
 
 interface AgendaItem {
   text: string
@@ -19,7 +20,7 @@ interface WizardState {
   title: string
   date: string
   place: string
-  people: Person[]
+  people: MeetingPerson[]
   chairperson_id: number | null
   agenda_items: AgendaItem[]
 }
@@ -27,7 +28,8 @@ interface WizardState {
 type WizardAction =
   | { type: 'SET_TITLE_DATE'; title: string; date: string; place: string }
   | { type: 'ADD_PERSON'; person: Person }
-  | { type: 'REORDER_PEOPLE'; people: Person[] }
+  | { type: 'REORDER_PEOPLE'; ids: number[] }
+  | { type: 'SET_ATTENDANCE_MODE'; id: number; mode: AttendanceMode }
   | { type: 'REMOVE_PERSON'; id: number }
   | { type: 'UPDATE_PERSON'; person: Person }
   | { type: 'SET_CHAIRPERSON'; id: number }
@@ -42,9 +44,12 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       return { ...state, title: action.title, date: action.date, place: action.place }
     case 'ADD_PERSON':
       if (state.people.find(p => p.id === action.person.id)) return state
-      return { ...state, people: [...state.people, action.person] }
+      return { ...state, people: [...state.people, { ...action.person, attendance_mode: 'in_person' }] }
     case 'REORDER_PEOPLE':
-      return { ...state, people: action.people }
+      if (action.ids.length !== state.people.length || new Set(action.ids).size !== action.ids.length || state.people.some(p => !action.ids.includes(p.id))) return state
+      return { ...state, people: action.ids.map(id => state.people.find(p => p.id === id)!) }
+    case 'SET_ATTENDANCE_MODE':
+      return { ...state, people: state.people.map(p => p.id === action.id ? { ...p, attendance_mode: action.mode } : p) }
     case 'REMOVE_PERSON': {
       const newPeople = state.people.filter(p => p.id !== action.id)
       return {
@@ -58,7 +63,7 @@ function reducer(state: WizardState, action: WizardAction): WizardState {
       }
     }
     case 'UPDATE_PERSON':
-      return { ...state, people: state.people.map(p => p.id === action.person.id ? action.person : p) }
+      return { ...state, people: state.people.map(p => p.id === action.person.id ? { ...action.person, attendance_mode: p.attendance_mode } : p) }
     case 'SET_CHAIRPERSON':
       return { ...state, chairperson_id: action.id }
     case 'ADD_AGENDA_ITEM':
@@ -123,7 +128,7 @@ export function CreateMeetingPage() {
     setSubmitError(null)
     try {
       for (const p of state.people) {
-        await addMeetingPerson(meetingId, p.id)
+        await addMeetingPerson(meetingId, p.id, p.attendance_mode)
       }
       await reorderPeople(meetingId, state.people.map(p => p.id))
       if (state.chairperson_id !== null) {
@@ -156,8 +161,9 @@ export function CreateMeetingPage() {
   async function handleSort() {
     if (state.people.length === 0) return
     try {
-      const sortedIds = await sortPeople(state.people.map(p => p.id))
-      dispatch({ type: 'REORDER_PEOPLE', people: sortedIds.map(id => state.people.find(p => p.id === id)!) })
+      const requestedIds = state.people.map(p => p.id)
+      const sortedIds = await sortPeople(requestedIds)
+      dispatch({ type: 'REORDER_PEOPLE', ids: sortedIds })
     } catch { /* ignore */ }
   }
 
@@ -172,7 +178,7 @@ export function CreateMeetingPage() {
     const next = [...state.people]
     const [moved] = next.splice(from, 1)
     next.splice(i, 0, moved)
-    dispatch({ type: 'REORDER_PEOPLE', people: next })
+    dispatch({ type: 'REORDER_PEOPLE', ids: next.map(p => p.id) })
   }
 
   function s5DragStart(ctx: string, from: number) { s5Ref.current = { ctx, from } }
@@ -192,7 +198,7 @@ export function CreateMeetingPage() {
       const next = [...others]
       const [moved] = next.splice(src.from, 1)
       next.splice(to, 0, moved)
-      dispatch({ type: 'REORDER_PEOPLE', people: [...(chair ? [chair] : []), ...next] })
+      dispatch({ type: 'REORDER_PEOPLE', ids: [...(chair ? [chair.id] : []), ...next.map(p => p.id)] })
     } else if (ctx === 'agenda') {
       const next = [...state.agenda_items]
       const [moved] = next.splice(src.from, 1)
@@ -343,12 +349,12 @@ export function CreateMeetingPage() {
                         />
                       </div>
                     ) : (
-                      <ParticipantCard
-                        participant={p}
-                        onEdit={() => setEditingPersonId(p.id)}
-                        onRemove={() => dispatch({ type: 'REMOVE_PERSON', id: p.id })}
-                        dragHandle
-                      />
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <ParticipantCard participant={p} onEdit={() => setEditingPersonId(p.id)} onRemove={() => dispatch({ type: 'REMOVE_PERSON', id: p.id })} dragHandle />
+                        </div>
+                        <AttendanceModeToggle value={p.attendance_mode} onChange={mode => dispatch({ type: 'SET_ATTENDANCE_MODE', id: p.id, mode })} />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -527,7 +533,7 @@ export function CreateMeetingPage() {
                         ].join(' ')}
                       >
                         <span className="text-gray-400 text-sm select-none w-3">⠿</span>
-                        <p className="text-sm">{fullName(p)}</p>
+                        <p className="text-sm">{fullName(p)} <span className="text-xs text-gray-500">({p.attendance_mode === 'vcs' ? 'ВКС' : 'очно'})</span></p>
                       </div>
                     ))}
                   </div>

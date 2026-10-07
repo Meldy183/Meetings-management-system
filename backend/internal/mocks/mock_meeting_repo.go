@@ -72,17 +72,17 @@ func (mr *MockMeetingRepositoryMockRecorder) AddAgendaItemSpeaker(ctx, meetingID
 }
 
 // AddPerson mocks base method.
-func (m *MockMeetingRepository) AddPerson(ctx context.Context, meetingID string, personID int) error {
+func (m *MockMeetingRepository) AddPerson(ctx context.Context, meetingID string, personID int, mode meeting.AttendanceMode) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddPerson", ctx, meetingID, personID)
+	ret := m.ctrl.Call(m, "AddPerson", ctx, meetingID, personID, mode)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddPerson indicates an expected call of AddPerson.
-func (mr *MockMeetingRepositoryMockRecorder) AddPerson(ctx, meetingID, personID any) *gomock.Call {
+func (mr *MockMeetingRepositoryMockRecorder) AddPerson(ctx, meetingID, personID, mode any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPerson", reflect.TypeOf((*MockMeetingRepository)(nil).AddPerson), ctx, meetingID, personID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPerson", reflect.TypeOf((*MockMeetingRepository)(nil).AddPerson), ctx, meetingID, personID, mode)
 }
 
 // Create mocks base method.
@@ -229,6 +229,20 @@ func (mr *MockMeetingRepositoryMockRecorder) ReorderPeople(ctx, meetingID, perso
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReorderPeople", reflect.TypeOf((*MockMeetingRepository)(nil).ReorderPeople), ctx, meetingID, personIDs)
 }
 
+// SetAttendanceMode mocks base method.
+func (m *MockMeetingRepository) SetAttendanceMode(ctx context.Context, meetingID string, personID int, mode meeting.AttendanceMode) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetAttendanceMode", ctx, meetingID, personID, mode)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetAttendanceMode indicates an expected call of SetAttendanceMode.
+func (mr *MockMeetingRepositoryMockRecorder) SetAttendanceMode(ctx, meetingID, personID, mode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetAttendanceMode", reflect.TypeOf((*MockMeetingRepository)(nil).SetAttendanceMode), ctx, meetingID, personID, mode)
+}
+
 // SetChairperson mocks base method.
 func (m *MockMeetingRepository) SetChairperson(ctx context.Context, meetingID string, personID int) error {
 	m.ctrl.T.Helper()
@@ -244,7 +258,7 @@ func (mr *MockMeetingRepositoryMockRecorder) SetChairperson(ctx, meetingID, pers
 }
 
 // Update mocks base method.
-func (m *MockMeetingRepository) Update(ctx context.Context, id, title string, date time.Time, place string, titlePhrase string, chairpersonPhrase string) error {
+func (m *MockMeetingRepository) Update(ctx context.Context, id, title string, date time.Time, place, titlePhrase, chairpersonPhrase string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Update", ctx, id, title, date, place, titlePhrase, chairpersonPhrase)
 	ret0, _ := ret[0].(error)

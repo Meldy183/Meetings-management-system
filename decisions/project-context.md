@@ -61,7 +61,7 @@ meetings-editor/
 - `middle_name` (string, optional) — patronymic
 - `info` (string, optional) — role/position, displayed in exported documents
 
-**Uniqueness:** `(last_name, first_name, middle_name)` is unique in the DB.
+**Uniqueness:** duplicate names are permitted by the current schema (migration 008 removed the unique constraint).
 
 ### Meeting
 - `id` (UUID) — assigned by server
@@ -70,7 +70,7 @@ meetings-editor/
 - `status` — derived: `"incomplete"` or `"complete"` (computed at read time, not stored)
 - `chairperson` — resolved Person object (nullable)
 - `agenda_items` — ordered list of `{ id, text, speakers }` (speakers is an ordered list of resolved Person objects, min 1)
-- `people` — ordered list of Person objects; order is user-controlled
+- `people` — ordered list of meeting-specific participant records, each containing a Person and `attendance_mode`; order is user-controlled
 - `created_at` — record creation timestamp
 
 ### Meeting Status
@@ -177,6 +177,10 @@ Documents generated in-memory as raw OOXML. Formatting:
 
 ---
 
+## Формат участия в совещании
+
+Формат хранится в `meeting_participants.attendance_mode` и относится к человеку в конкретном совещании. Допустимы `in_person` («Очно», по умолчанию, включая старые записи) и `vcs` («ВКС»). Докладчик использует формат своей записи участника; председатель исключается из таблиц списка участников. DOCX содержит отдельные непустые таблицы по форматам с нумерацией каждой с 1. API предоставляет режим в `Meeting.people` и `GET /meetings/{id}/people`, изменение — через `PATCH /meetings/{id}/people/{pid}`.
+
 ## Running Locally
 
 ### Docker Compose (recommended)
@@ -191,7 +195,6 @@ docker compose up --build -d
 # Backend
 cd backend
 DATABASE_URL="postgres://meetings:meetings@localhost:5432/meetings_editor?sslmode=disable" PORT=8080 go run ./cmd/api
-
 # Frontend
 cd frontend && npm install && npm run dev
 

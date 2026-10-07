@@ -12,7 +12,9 @@ import {
 import { ApiError } from '../api/client'
 import { SpeakerPicker } from '../components/SpeakerPicker'
 import { ParticipantSearch } from '../components/ParticipantSearch'
-import type { Person, AgendaItem, Meeting } from '../api/types'
+import type { AttendanceMode, MeetingPerson, Person, AgendaItem } from '../api/types'
+import { setMeetingPersonAttendanceMode } from '../api/meetings'
+import { AttendanceModeToggle } from '../components/AttendanceModeToggle'
 
 function useDragReorder<T>(
   items: T[],
@@ -49,15 +51,43 @@ function shortName(p: Person) {
   return initials ? initials + ' ' + p.last_name : p.last_name
 }
 
+interface CardMutationContext {
+  id: string
+  generation: number
+}
+
 
 export function MeetingDetailPage() {
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
+  const operationRef = useRef(false)
+  const generationRef = useRef(0)
+  const routeIdRef = useRef(id)
+  const mountedRef = useRef(false)
+  const [operationBusy, setOperationBusy] = useState(false)
+  routeIdRef.current = id
+  useEffect(() => {
+    generationRef.current += 1
+    operationRef.current = false
+    setOperationBusy(false)
+  }, [id])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false; generationRef.current += 1 }
+  }, [])
+
+  function captureCardOperation(): CardMutationContext | null {
+    return id ? { id, generation: generationRef.current } : null
+  }
+
+  function isCurrentCardOperation(context?: CardMutationContext | null) {
+    return !!context && mountedRef.current && routeIdRef.current === context.id && context.generation === generationRef.current
+  }
 
   // DnD local state
   const [agendaItems, setAgendaItems] = useState<AgendaItem[]>([])
-  const [people, setPeople] = useState<Person[]>([])
+  const [people, setPeople] = useState<MeetingPerson[]>([])
 
   // Speaker drag-and-drop state (one drag active at a time across all agenda items)
   const speakerDragSrc = useRef<{ itemId: number; index: number } | null>(null)
@@ -86,8 +116,12 @@ export function MeetingDetailPage() {
 
   const { data: meeting, isLoading, isError } = useQuery({
     queryKey: ['meeting', id],
-    queryFn: () => getMeeting(id!),
-    enabled: !!id,
+    queryFn: ({ signal }) => {
+      if (operationRef.current) throw new DOMException('Meeting update in progress', 'AbortError')
+      return getMeeting(id!, signal)
+    },
+    enabled: !!id && !operationBusy,
+    refetchOnWindowFocus: false,
   })
 
   useEffect(() => {
@@ -104,95 +138,130 @@ export function MeetingDetailPage() {
     }
   }, [meeting])
 
-  function setMeetingData(updated: Meeting) {
-    queryClient.setQueryData(['meeting', id], updated)
+  async function runMeetingMutation<T>(request: () => Promise<T>, synchronize = true): Promise<T> {
+    if (!id || operationRef.current) throw new Error('Дождитесь завершения предыдущего изменения')
+    const capturedId = id
+    const generation = generationRef.current
+    operationRef.current = true
+    setOperationBusy(true)
+    try {
+      await queryClient.cancelQueries({ queryKey: ['meeting', capturedId] })
+      const result = await request()
+      if (isCurrentCardOperation({ id: capturedId, generation })) {
+        if (result && typeof result === 'object' && 'id' in result) queryClient.setQueryData(['meeting', capturedId], result)
+        if (synchronize) {
+          try {
+            const refreshed = await getMeeting(capturedId)
+            if (isCurrentCardOperation({ id: capturedId, generation })) queryClient.setQueryData(['meeting', capturedId], refreshed)
+          } catch {
+            if (isCurrentCardOperation({ id: capturedId, generation })) alert('Изменение сохранено, но не удалось обновить карточку. Перезагрузите её позже.')
+          }
+        }
+      }
+      return result
+    } finally {
+      if (isCurrentCardOperation({ id: capturedId, generation })) {
+        operationRef.current = false
+        setOperationBusy(false)
+      }
+    }
   }
 
   // DnD mutations
   const agendaMutation = useMutation({
-    mutationFn: (ids: number[]) => reorderAgendaItems(id!, ids),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
-    onError: () => { if (meeting) setAgendaItems(meeting.agenda_items) },
+    mutationFn: (ids: number[]) => runMeetingMutation(() => reorderAgendaItems(id!, ids)),
+    onMutate: captureCardOperation,
+    onError: (_error, _ids, context) => { if (meeting && isCurrentCardOperation(context)) setAgendaItems(meeting.agenda_items) },
   })
 
   const peopleMutation = useMutation({
-    mutationFn: (ids: number[]) => reorderPeople(id!, ids),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meeting', id] }),
-    onError: () => { if (meeting) setPeople(meeting.people) },
+    mutationFn: (ids: number[]) => runMeetingMutation(() => reorderPeople(id!, ids)),
+    onMutate: captureCardOperation,
+    onError: (_error, _ids, context) => { if (meeting && isCurrentCardOperation(context)) setPeople(meeting.people) },
   })
 
   const sortPeopleMutation = useMutation({
-    mutationFn: () => sortMeetingPeople(id!),
-    onSuccess: (updated) => setMeetingData(updated),
+    mutationFn: () => runMeetingMutation(() => sortMeetingPeople(id!)),
+    onMutate: captureCardOperation,
   })
 
   const updateMeetingMutation = useMutation({
-    mutationFn: (data: { title: string; date: string; place?: string }) => updateMeeting(id!, data),
-    onSuccess: (updated) => { setMeetingData(updated); setEditingMeeting(false) },
+    mutationFn: (data: { title: string; date: string; place?: string }) => runMeetingMutation(() => updateMeeting(id!, data)),
+    onMutate: captureCardOperation,
+    onSuccess: (_updated, _data, context) => { if (isCurrentCardOperation(context)) setEditingMeeting(false) },
   })
 
   const updateDocHeaderMutation = useMutation({
-    mutationFn: () => updateMeeting(id!, {
+    mutationFn: () => runMeetingMutation(() => updateMeeting(id!, {
       title: meeting!.title,
       date: meeting!.date,
       place: meeting!.place,
       title_phrase: titlePhraseInput,
       chairperson_phrase: chairpersonPhraseInput,
-    }),
-    onSuccess: (updated) => {
-      setMeetingData(updated)
-    },
+    })),
+    onMutate: captureCardOperation,
   })
 
   const setChairpersonMutation = useMutation({
-    mutationFn: (personId: number) => setChairperson(id!, personId),
-    onSuccess: (updated) => { setMeetingData(updated); setEditingChairperson(false) },
-    onError: (e) => {
-      if (e instanceof ApiError) alert(e.message)
+    mutationFn: (personId: number) => runMeetingMutation(() => setChairperson(id!, personId)),
+    onMutate: captureCardOperation,
+    onSuccess: (_updated, _personId, context) => { if (isCurrentCardOperation(context)) setEditingChairperson(false) },
+    onError: (e, _personId, context) => {
+      if (isCurrentCardOperation(context) && e instanceof ApiError) alert(e.message)
     },
   })
 
+  const attendanceMutation = useMutation({
+    mutationFn: ({ personId, mode }: { personId: number; mode: AttendanceMode }) => runMeetingMutation(() => setMeetingPersonAttendanceMode(id!, personId, mode)),
+    onMutate: captureCardOperation,
+    onError: (e, _variables, context) => { if (isCurrentCardOperation(context) && e instanceof ApiError) alert(e.message) },
+  })
+
   const deleteMeetingMutation = useMutation({
-    mutationFn: () => deleteMeeting(id!),
-    onSuccess: () => navigate('/'),
+    mutationFn: () => runMeetingMutation(() => deleteMeeting(id!), false),
+    onMutate: captureCardOperation,
+    onSuccess: (_result, _variables, context) => { if (context && isCurrentCardOperation(context)) { void queryClient.cancelQueries({ queryKey: ['meeting', context.id] }).then(() => queryClient.removeQueries({ queryKey: ['meeting', context.id] })); navigate('/') } },
   })
 
   const addPersonMutation = useMutation({
-    mutationFn: (personId: number) => addMeetingPerson(id!, personId),
-    onSuccess: (updated) => setMeetingData(updated),
-    onError: (e) => {
-      if (e instanceof ApiError) alert(e.message)
+    mutationFn: (personId: number) => runMeetingMutation(() => addMeetingPerson(id!, personId)),
+    onMutate: captureCardOperation,
+    onError: (e, _personId, context) => {
+      if (isCurrentCardOperation(context) && e instanceof ApiError) alert(e.message)
     },
   })
 
   const removePersonMutation = useMutation({
-    mutationFn: (personId: number) => removeMeetingPerson(id!, personId),
-    onSuccess: (updated) => setMeetingData(updated),
-    onError: (e) => {
-      if (e instanceof ApiError) alert(e.message)
+    mutationFn: (personId: number) => runMeetingMutation(() => removeMeetingPerson(id!, personId)),
+    onMutate: captureCardOperation,
+    onError: (e, _personId, context) => {
+      if (isCurrentCardOperation(context) && e instanceof ApiError) alert(e.message)
     },
   })
 
   const addAgendaItemMutation = useMutation({
-    mutationFn: (data: { text: string; speaker_ids: number[] }) => addAgendaItem(id!, data),
-    onSuccess: (updated) => { setMeetingData(updated); setShowAddItem(false); setNewItem({ text: '', speaker_ids: [] }) },
+    mutationFn: (data: { text: string; speaker_ids: number[] }) => runMeetingMutation(() => addAgendaItem(id!, data)),
+    onMutate: captureCardOperation,
+    onSuccess: (_updated, _data, context) => { if (isCurrentCardOperation(context)) { setShowAddItem(false); setNewItem({ text: '', speaker_ids: [] }) } },
   })
 
   const updateAgendaItemMutation = useMutation({
     mutationFn: ({ itemId, data }: { itemId: number; data: { text: string; speaker_ids: number[] } }) =>
-      updateAgendaItem(id!, itemId, data),
-    onSuccess: (updated) => { setMeetingData(updated); setEditingItemId(null) },
+      runMeetingMutation(() => updateAgendaItem(id!, itemId, data)),
+    onMutate: captureCardOperation,
+    onSuccess: (_updated, _variables, context) => { if (isCurrentCardOperation(context)) setEditingItemId(null) },
   })
 
   const deleteAgendaItemMutation = useMutation({
-    mutationFn: (itemId: number) => deleteAgendaItem(id!, itemId),
-    onSuccess: (updated) => setMeetingData(updated),
+    mutationFn: (itemId: number) => runMeetingMutation(() => deleteAgendaItem(id!, itemId)),
+    onMutate: captureCardOperation,
   })
 
   const reorderSpeakersMutation = useMutation({
     mutationFn: ({ itemId, ids }: { itemId: number; ids: number[] }) =>
-      reorderAgendaItemSpeakers(id!, itemId, ids),
-    onError: () => { if (meeting) setAgendaItems(meeting.agenda_items) },
+      runMeetingMutation(() => reorderAgendaItemSpeakers(id!, itemId, ids)),
+    onMutate: captureCardOperation,
+    onError: (_error, _variables, context) => { if (meeting && isCurrentCardOperation(context)) setAgendaItems(meeting.agenda_items) },
   })
 
   function handleSpeakerDragStart(itemId: number, index: number) {
@@ -204,6 +273,7 @@ export function MeetingDetailPage() {
     if (speakerDragSrc.current?.itemId === itemId) setSpeakerDragOver({ itemId, index })
   }
   function handleSpeakerDrop(itemId: number, toIndex: number) {
+    if (operationRef.current) return
     const src = speakerDragSrc.current
     speakerDragSrc.current = null
     setSpeakerDragOver(null)
@@ -224,6 +294,7 @@ export function MeetingDetailPage() {
 
   // DnD hooks
   const agendaDnd = useDragReorder(agendaItems, (reordered) => {
+    if (operationRef.current) return
     setAgendaItems(reordered)
     agendaMutation.mutate(reordered.map(i => i.id))
   })
@@ -233,6 +304,7 @@ export function MeetingDetailPage() {
   const others = people.filter(p => p.id !== meetingChairId)
 
   const peopleDnd = useDragReorder(others, (reordered) => {
+    if (operationRef.current) return
     const allPeople = [...(chair ? [chair] : []), ...reordered]
     setPeople(allPeople)
     peopleMutation.mutate(allPeople.map(p => p.id))
@@ -263,7 +335,9 @@ export function MeetingDetailPage() {
   if (isError || !meeting) return <div className="max-w-2xl mx-auto px-4 py-6 text-red-500 text-sm">Совещание не найдено</div>
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <div className="relative max-w-2xl mx-auto px-4 py-6 space-y-6" aria-busy={operationBusy}>
+      {operationBusy && <div className="fixed inset-0 z-40 cursor-wait bg-white/20" aria-label="Сохранение изменений" />}
+      <div inert={operationBusy}>
 
       {/* Header */}
       <div className="flex items-start gap-3">
@@ -493,6 +567,7 @@ export function MeetingDetailPage() {
                 <p className="text-sm font-medium truncate">{fullName(chair)}</p>
                 {chair.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{chair.info}</p>}
               </div>
+              <AttendanceModeToggle value={chair.attendance_mode} disabled={attendanceMutation.isPending} onChange={mode => attendanceMutation.mutate({ personId: chair.id, mode })} />
               <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full shrink-0">Пред.</span>
               <button
                 onClick={() => { if (confirm(`Удалить ${chair.last_name} из совещания?`)) removePersonMutation.mutate(chair.id) }}
@@ -521,6 +596,7 @@ export function MeetingDetailPage() {
                 <p className="text-sm font-medium truncate">{fullName(p)}</p>
                 {p.info && <p className="text-xs text-gray-500 mt-0.5 truncate">{p.info}</p>}
               </div>
+              <AttendanceModeToggle value={p.attendance_mode} disabled={attendanceMutation.isPending} onChange={mode => attendanceMutation.mutate({ personId: p.id, mode })} />
               <button
                 onClick={() => { if (confirm(`Удалить ${p.last_name} из совещания?`)) removePersonMutation.mutate(p.id) }}
                 className="shrink-0 text-gray-300 hover:text-red-500 text-lg leading-none"
@@ -700,6 +776,7 @@ export function MeetingDetailPage() {
         >
           ↓ Список участников (.docx)
         </button>
+      </div>
       </div>
     </div>
   )

@@ -604,7 +604,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Person'
+                  $ref: '#/components/schemas/MeetingPerson'
         '404':
           description: Meeting not found
           content:
@@ -638,7 +638,12 @@ paths:
               $ref: '#/components/schemas/AddMeetingPerson'
             example:
               person_id: 55
+              attendance_mode: vcs
       responses:
+        '400':
+          description: Invalid request body or attendance mode
+        '401':
+          description: Unauthorized
         '200':
           description: Person added; returns updated meeting
           content:
@@ -669,6 +674,36 @@ paths:
                 message: person not found
 
   /meetings/{id}/people/{pid}:
+    patch:
+      tags: [meetings]
+      summary: Change a person's attendance mode in a meeting
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: pid
+          in: path
+          required: true
+          schema: { type: integer, minimum: 1 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [attendance_mode]
+              properties:
+                attendance_mode: { $ref: '#/components/schemas/AttendanceMode' }
+      responses:
+        '200':
+          description: Updated meeting
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Meeting' }
+        '400': { description: Invalid participant ID or attendance mode }
+        '401': { description: Unauthorized }
+        '404': { description: Meeting participant not found }
     delete:
       tags:
         - meetings
@@ -1427,6 +1462,20 @@ components:
             (right column in Повестка and Список участников)
           example: Руководитель отдела
 
+    AttendanceMode:
+      type: string
+      enum: [in_person, vcs]
+      description: Attendance format for one person in one meeting.
+
+    MeetingPerson:
+      allOf:
+        - $ref: '#/components/schemas/Person'
+        - type: object
+          required: [attendance_mode]
+          properties:
+            attendance_mode:
+              $ref: '#/components/schemas/AttendanceMode'
+
     PersonCreate:
       type: object
       description: Payload for creating or updating a person.
@@ -1589,7 +1638,7 @@ components:
             People in this meeting in their current display order
             (can be changed via PUT /meetings/{id}/people/order).
           items:
-            $ref: '#/components/schemas/Person'
+            $ref: '#/components/schemas/MeetingPerson'
         status:
           type: string
           enum: [incomplete, complete]
@@ -1690,6 +1739,11 @@ components:
           type: integer
           description: ID of the person to add to the meeting
           example: 55
+        attendance_mode:
+          allOf:
+            - $ref: '#/components/schemas/AttendanceMode'
+          default: in_person
+          description: Defaults to in_person when omitted.
 
     AgendaItemUpsert:
       type: object

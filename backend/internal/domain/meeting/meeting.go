@@ -12,16 +12,32 @@ type AgendaItem struct {
 	Speakers []person.Person
 }
 
+type AttendanceMode string
+
+const (
+	AttendanceModeInPerson AttendanceMode = "in_person"
+	AttendanceModeVCS      AttendanceMode = "vcs"
+)
+
+func (m AttendanceMode) Valid() bool {
+	return m == AttendanceModeInPerson || m == AttendanceModeVCS
+}
+
+type MeetingPerson struct {
+	person.Person
+	AttendanceMode AttendanceMode
+}
+
 type Meeting struct {
 	ID                string
 	Title             string
 	Date              time.Time
 	Place             string
-	TitlePhrase       string // declined title for export headers
-	ChairpersonPhrase string // text after "под председательством " in export headers
+	TitlePhrase       string         // declined title for export headers
+	ChairpersonPhrase string         // text after "под председательством " in export headers
 	Chairperson       *person.Person // nil when not yet assigned
 	AgendaItems       []AgendaItem
-	People            []person.Person
+	People            []MeetingPerson
 	CreatedAt         time.Time
 }
 
@@ -42,7 +58,8 @@ type Repository interface {
 	Delete(ctx context.Context, id string) error
 	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
-	AddPerson(ctx context.Context, meetingID string, personID int) error
+	AddPerson(ctx context.Context, meetingID string, personID int, mode AttendanceMode) error
+	SetAttendanceMode(ctx context.Context, meetingID string, personID int, mode AttendanceMode) error
 	RemovePerson(ctx context.Context, meetingID string, personID int) error
 	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (int, error)
 	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) error

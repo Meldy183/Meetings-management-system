@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import type { Person } from '../api/types'
 
 function fullName(p: Person) {
@@ -17,15 +17,15 @@ export function SpeakerPicker({
   const selected = speakerIds.map(id => people.find(p => p.id === id)!).filter(Boolean)
   const available = people.filter(p => !speakerIds.includes(p.id))
 
-  const dragIndex = useRef<number | null>(null)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  function handleDragStart(i: number) { dragIndex.current = i }
+  function handleDragStart(i: number) { setDragIndex(i) }
   function handleDragOver(e: React.DragEvent, i: number) { e.preventDefault(); setDragOverIndex(i) }
-  function handleDragEnd() { dragIndex.current = null; setDragOverIndex(null) }
+  function handleDragEnd() { setDragIndex(null); setDragOverIndex(null) }
   function handleDrop(toIndex: number) {
-    const from = dragIndex.current
-    dragIndex.current = null
+    const from = dragIndex
+    setDragIndex(null)
     setDragOverIndex(null)
     if (from === null || from === toIndex) return
     const next = [...speakerIds]
@@ -49,8 +49,8 @@ export function SpeakerPicker({
               onDragEnd={handleDragEnd}
               className={[
                 'flex items-center min-w-0 overflow-hidden gap-2 px-2 py-1.5 bg-white border rounded-lg text-sm transition-opacity',
-                dragOverIndex === i && dragIndex.current !== i ? 'border-green-400 bg-green-50' : '',
-                dragIndex.current === i ? 'opacity-40' : '',
+                dragOverIndex === i && dragIndex !== i ? 'border-green-400 bg-green-50' : '',
+                dragIndex === i ? 'opacity-40' : '',
               ].join(' ')}
             >
               <span className="text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing select-none">⠿</span>

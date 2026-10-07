@@ -87,16 +87,28 @@ func (g *Generator) Participants(m *domMeeting.Meeting) ([]byte, error) {
 		body.WriteString(para(pPrRightSmallSpaced() + tnr(m.Place, 28)))
 	}
 	body.WriteString(para(pPrLeft())) // blank line before table
-	people := m.People
-	if m.Chairperson != nil {
-		people = make([]person.Person, 0, len(m.People))
+	groups := []struct {
+		mode  domMeeting.AttendanceMode
+		title string
+	}{
+		{domMeeting.AttendanceModeInPerson, "Очно"}, {domMeeting.AttendanceModeVCS, "ВКС"},
+	}
+	for _, group := range groups {
+		people := make([]person.Person, 0, len(m.People))
 		for _, p := range m.People {
-			if p.ID != m.Chairperson.ID {
-				people = append(people, p)
+			if m.Chairperson != nil && p.ID == m.Chairperson.ID {
+				continue
+			}
+			if p.AttendanceMode == group.mode {
+				people = append(people, p.Person)
 			}
 		}
+		if len(people) == 0 {
+			continue
+		}
+		body.WriteString(para(pPrLeftKeepNextSpaced() + tnrBoldColor(group.title, 27, "0070C0")))
+		body.WriteString(participantsTable(people))
 	}
-	body.WriteString(participantsTable(people))
 
 	return buildDocx(body.String())
 }
@@ -132,6 +144,10 @@ func pPrLeft() string {
 	return `<w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr>`
 }
 
+func pPrLeftKeepNextSpaced() string {
+	return `<w:pPr><w:spacing w:before="240" w:after="0" w:line="240" w:lineRule="auto"/><w:keepNext/></w:pPr>`
+}
+
 // pPrCenterSpaced returns centered paragraph properties with 120-twip spacing above and below.
 func pPrCenterSpaced() string {
 	return `<w:pPr><w:spacing w:before="120" w:after="120" w:line="240" w:lineRule="auto"/><w:jc w:val="center"/></w:pPr>`
@@ -155,6 +171,13 @@ func tnrBold(s string, size int) string {
 	return fmt.Sprintf(
 		`<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:sz w:val="%d"/><w:szCs w:val="%d"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>`,
 		size, size, xmlEscape(s),
+	)
+}
+
+func tnrBoldColor(s string, size int, color string) string {
+	return fmt.Sprintf(
+		`<w:r><w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:cs="Times New Roman"/><w:b/><w:color w:val="%s"/><w:sz w:val="%d"/><w:szCs w:val="%d"/></w:rPr><w:t xml:space="preserve">%s</w:t></w:r>`,
+		color, size, size, xmlEscape(s),
 	)
 }
 
@@ -367,7 +390,6 @@ func formatDate(t time.Time) string {
 	return fmt.Sprintf("%d %s %d г., %02d:%02d",
 		t.Day(), months[t.Month()-1], t.Year(), t.Hour(), t.Minute())
 }
-
 
 func xmlEscape(s string) string {
 	s = strings.ReplaceAll(s, "&", "&amp;")

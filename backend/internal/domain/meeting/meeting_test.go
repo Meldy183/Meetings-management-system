@@ -14,11 +14,11 @@ var (
 
 func baseMeeting() *Meeting {
 	return &Meeting{
-		ID:    "00000000-0000-0000-0000-000000000001",
-		Title: "Test",
-		Date:  time.Now(),
+		ID:          "00000000-0000-0000-0000-000000000001",
+		Title:       "Test",
+		Date:        time.Now(),
 		Chairperson: &alice,
-		People:      []person.Person{alice, bob},
+		People:      []MeetingPerson{{Person: alice, AttendanceMode: AttendanceModeInPerson}, {Person: bob, AttendanceMode: AttendanceModeInPerson}},
 		AgendaItems: []AgendaItem{
 			{ID: 1, Text: "Item 1", Speakers: []person.Person{bob}},
 		},
@@ -51,7 +51,7 @@ func TestStatus_NoPeople(t *testing.T) {
 
 func TestStatus_EmptyPeopleSlice(t *testing.T) {
 	m := baseMeeting()
-	m.People = []person.Person{}
+	m.People = []MeetingPerson{}
 	if got := m.Status(); got != "incomplete" {
 		t.Errorf("want incomplete, got %q", got)
 	}

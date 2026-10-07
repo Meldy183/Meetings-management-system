@@ -32,19 +32,23 @@ func TestPersonRepo_CreateAndGetByID(t *testing.T) {
 	}
 }
 
-func TestPersonRepo_Create_Conflict(t *testing.T) {
+func TestPersonRepo_Create_AllowsDuplicateNames(t *testing.T) {
 	pool := testutil.NewDB(t)
 	testutil.TruncateTables(t, pool)
 	repo := New(pool)
 	ctx := testutil.Ctx()
 
 	p := &person.Person{LastName: "Дубль", FirstName: "Иван", MiddleName: ""}
-	if _, err := repo.Create(ctx, p); err != nil {
+	first, err := repo.Create(ctx, p)
+	if err != nil {
 		t.Fatalf("first Create: %v", err)
 	}
-	_, err := repo.Create(ctx, &person.Person{LastName: "Дубль", FirstName: "Иван", MiddleName: ""})
-	if err != errs.ErrConflict {
-		t.Errorf("want ErrConflict on duplicate, got %v", err)
+	second, err := repo.Create(ctx, &person.Person{LastName: "Дубль", FirstName: "Иван", MiddleName: ""})
+	if err != nil {
+		t.Fatalf("duplicate names should be allowed: %v", err)
+	}
+	if first.ID == second.ID {
+		t.Errorf("duplicate records should have independent IDs: %d", first.ID)
 	}
 }
 
@@ -77,7 +81,7 @@ func TestPersonRepo_GetAll_OrderedByName(t *testing.T) {
 		}
 	}
 
-	all, err := repo.GetAll(ctx)
+	all, err := repo.GetAll(ctx, "")
 	if err != nil {
 		t.Fatalf("GetAll: %v", err)
 	}

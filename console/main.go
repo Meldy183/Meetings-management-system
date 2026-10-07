@@ -81,8 +81,15 @@ type ListMeetingPeopleArgs struct {
 }
 
 type AddMeetingPersonArgs struct {
-	MeetingID string `json:"meeting_id"`
-	PersonID  int    `json:"person_id"`
+	MeetingID      string          `json:"meeting_id"`
+	PersonID       int             `json:"person_id"`
+	AttendanceMode json.RawMessage `json:"attendance_mode"`
+}
+
+type SetMeetingPersonAttendanceModeArgs struct {
+	MeetingID      string          `json:"meeting_id"`
+	PersonID       int             `json:"person_id"`
+	AttendanceMode json.RawMessage `json:"attendance_mode"`
 }
 
 type RemoveMeetingPersonArgs struct {
@@ -321,8 +328,27 @@ func main() {
 		if args.MeetingID == "" || args.PersonID <= 0 {
 			fatalf("Validation error: meeting_id and person_id (> 0) are required\n")
 		}
-		body, _ := json.Marshal(map[string]int{"person_id": args.PersonID})
+		mode, includeMode := parseAttendanceMode(args.AttendanceMode, true)
+		payload := map[string]any{"person_id": args.PersonID}
+		if includeMode {
+			payload["attendance_mode"] = mode
+		}
+		body, _ := json.Marshal(payload)
 		doHTTP(client, http.MethodPost, baseURL+"/meetings/"+args.MeetingID+"/people", body, token)
+
+	case "set_meeting_person_attendance_mode":
+		var args SetMeetingPersonAttendanceModeArgs
+		mustUnmarshal(payloadStr, &args)
+		if args.MeetingID == "" || args.PersonID <= 0 {
+			fatalf("Validation error: meeting_id and person_id (> 0) are required\n")
+		}
+		mode, includeMode := parseAttendanceMode(args.AttendanceMode, false)
+		if !includeMode {
+			fatalf("Validation error: attendance_mode must be 'in_person' or 'vcs'\n")
+		}
+		body, _ := json.Marshal(map[string]string{"attendance_mode": mode})
+		url := fmt.Sprintf("%s/meetings/%s/people/%d", baseURL, args.MeetingID, args.PersonID)
+		doHTTP(client, http.MethodPatch, url, body, token)
 
 	case "remove_meeting_person":
 		var args RemoveMeetingPersonArgs
@@ -484,6 +510,17 @@ func mustUnmarshal(payload string, dst interface{}) {
 	}
 }
 
+func parseAttendanceMode(raw json.RawMessage, optional bool) (string, bool) {
+	if len(raw) == 0 && optional {
+		return "", false
+	}
+	var mode string
+	if len(raw) == 0 || string(raw) == "null" || json.Unmarshal(raw, &mode) != nil || (mode != "in_person" && mode != "vcs") {
+		fatalf("Validation error: attendance_mode must be omitted or one of 'in_person', 'vcs'\n")
+	}
+	return mode, true
+}
+
 func fatalf(format string, args ...interface{}) {
 	fmt.Printf(format, args...)
 	os.Exit(1)
@@ -583,7 +620,8 @@ Commands & example payloads:
 
   ── Meeting People ──
   list_meeting_people   '{"meeting_id":"<uuid>"}'
-  add_meeting_person    '{"meeting_id":"<uuid>","person_id":55}'
+  add_meeting_person    '{"meeting_id":"<uuid>","person_id":55,"attendance_mode":"vcs"}'
+  set_meeting_person_attendance_mode '{"meeting_id":"<uuid>","person_id":55,"attendance_mode":"in_person"}'
   remove_meeting_person '{"meeting_id":"<uuid>","person_id":55}'
   order_meeting_people  '{"meeting_id":"<uuid>","person_ids":[17,42]}'
   sort_meeting_people   '{"meeting_id":"<uuid>"}'

@@ -78,7 +78,7 @@ func TestMeetingRepo_Update(t *testing.T) {
 	m := seedMeeting(t, repo, "Оригинал")
 	newDate := time.Date(2027, 1, 1, 9, 0, 0, 0, time.UTC)
 
-	if err := repo.Update(ctx, m.ID, "Изменён", newDate, ""); err != nil {
+	if err := repo.Update(ctx, m.ID, "Изменён", newDate, "", "", ""); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
 
@@ -94,7 +94,7 @@ func TestMeetingRepo_Update_NotFound(t *testing.T) {
 	repo := New(pool)
 	ctx := testutil.Ctx()
 
-	err := repo.Update(ctx, "00000000-0000-0000-0000-000000000000", "X", time.Now(), "")
+	err := repo.Update(ctx, "00000000-0000-0000-0000-000000000000", "X", time.Now(), "", "", "")
 	if err != errs.ErrNotFound {
 		t.Errorf("want ErrNotFound, got %v", err)
 	}
@@ -154,7 +154,7 @@ func TestMeetingRepo_SetChairperson_And_Load(t *testing.T) {
 	m := seedMeeting(t, mRepo, "Совещание")
 
 	// Add alice to meeting first
-	if err := mRepo.AddPerson(ctx, m.ID, alice.ID); err != nil {
+	if err := mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson); err != nil {
 		t.Fatalf("AddPerson: %v", err)
 	}
 
@@ -179,10 +179,10 @@ func TestMeetingRepo_AddAndRemovePerson(t *testing.T) {
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
 
-	if err := mRepo.AddPerson(ctx, m.ID, alice.ID); err != nil {
+	if err := mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson); err != nil {
 		t.Fatalf("AddPerson alice: %v", err)
 	}
-	if err := mRepo.AddPerson(ctx, m.ID, bob.ID); err != nil {
+	if err := mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson); err != nil {
 		t.Fatalf("AddPerson bob: %v", err)
 	}
 
@@ -201,6 +201,39 @@ func TestMeetingRepo_AddAndRemovePerson(t *testing.T) {
 	}
 }
 
+func TestMeetingRepo_AttendanceModeIsScopedAndPersisted(t *testing.T) {
+	pool := testutil.NewDB(t)
+	testutil.TruncateTables(t, pool)
+	repo := New(pool)
+	ctx := testutil.Ctx()
+	person := seedPerson(t, personRepo.New(pool), "Сидоров", "Семён")
+	first := seedMeeting(t, repo, "Первая встреча")
+	second := seedMeeting(t, repo, "Вторая встреча")
+	if err := repo.AddPerson(ctx, first.ID, person.ID, meeting.AttendanceModeVCS); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.AddPerson(ctx, second.ID, person.ID, meeting.AttendanceModeVCS); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetAttendanceMode(ctx, first.ID, person.ID, meeting.AttendanceModeInPerson); err != nil {
+		t.Fatal(err)
+	}
+	if err := repo.SetAttendanceMode(ctx, first.ID, person.ID, meeting.AttendanceModeInPerson); err != nil {
+		t.Fatalf("repeating the same mode must succeed: %v", err)
+	}
+	firstReload, err := repo.GetByID(ctx, first.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondReload, err := repo.GetByID(ctx, second.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstReload.People[0].AttendanceMode != meeting.AttendanceModeInPerson || secondReload.People[0].AttendanceMode != meeting.AttendanceModeVCS {
+		t.Fatalf("attendance mode leaked across meetings: first=%q second=%q", firstReload.People[0].AttendanceMode, secondReload.People[0].AttendanceMode)
+	}
+}
+
 func TestMeetingRepo_ReorderPeople(t *testing.T) {
 	pool := testutil.NewDB(t)
 	testutil.TruncateTables(t, pool)
@@ -211,8 +244,8 @@ func TestMeetingRepo_ReorderPeople(t *testing.T) {
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
 
 	// Reverse order
 	if err := mRepo.ReorderPeople(ctx, m.ID, []int{bob.ID, alice.ID}); err != nil {
@@ -235,8 +268,8 @@ func TestMeetingRepo_AddAgendaItem_And_Speakers(t *testing.T) {
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
 
 	itemID, err := mRepo.AddAgendaItem(ctx, m.ID, "Первый вопрос", []int{alice.ID})
 	if err != nil {
@@ -277,8 +310,8 @@ func TestMeetingRepo_UpdateAgendaItem(t *testing.T) {
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
 
 	itemID, _ := mRepo.AddAgendaItem(ctx, m.ID, "Старый текст", []int{alice.ID})
 
@@ -305,7 +338,7 @@ func TestMeetingRepo_DeleteAgendaItem(t *testing.T) {
 
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
 	itemID, _ := mRepo.AddAgendaItem(ctx, m.ID, "Удалить", []int{alice.ID})
 
 	if err := mRepo.DeleteAgendaItem(ctx, m.ID, itemID); err != nil {
@@ -327,7 +360,7 @@ func TestMeetingRepo_ReorderAgendaItems(t *testing.T) {
 
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
 	id1, _ := mRepo.AddAgendaItem(ctx, m.ID, "Первый", []int{alice.ID})
 	id2, _ := mRepo.AddAgendaItem(ctx, m.ID, "Второй", []int{alice.ID})
 
@@ -351,8 +384,8 @@ func TestMeetingRepo_RemoveAgendaItemSpeaker(t *testing.T) {
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
 	itemID, _ := mRepo.AddAgendaItem(ctx, m.ID, "item", []int{alice.ID, bob.ID})
 
 	if err := mRepo.RemoveAgendaItemSpeaker(ctx, m.ID, itemID, alice.ID); err != nil {
@@ -376,8 +409,8 @@ func TestMeetingRepo_ReorderAgendaItemSpeakers(t *testing.T) {
 	alice := seedPerson(t, pRepo, "Алиса", "А")
 	bob := seedPerson(t, pRepo, "Боб", "Б")
 	m := seedMeeting(t, mRepo, "Meeting")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
 	itemID, _ := mRepo.AddAgendaItem(ctx, m.ID, "item", []int{alice.ID, bob.ID})
 
 	// Reverse speaker order
@@ -404,9 +437,9 @@ func TestMeetingRepo_GetByID_FullNestedStructure(t *testing.T) {
 	carol := seedPerson(t, pRepo, "Кэрол", "К")
 
 	m := seedMeeting(t, mRepo, "Полное совещание")
-	_ = mRepo.AddPerson(ctx, m.ID, alice.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, bob.ID)
-	_ = mRepo.AddPerson(ctx, m.ID, carol.ID)
+	_ = mRepo.AddPerson(ctx, m.ID, alice.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, bob.ID, meeting.AttendanceModeInPerson)
+	_ = mRepo.AddPerson(ctx, m.ID, carol.ID, meeting.AttendanceModeInPerson)
 	_ = mRepo.SetChairperson(ctx, m.ID, alice.ID)
 	id1, _ := mRepo.AddAgendaItem(ctx, m.ID, "Вопрос 1", []int{bob.ID})
 	id2, _ := mRepo.AddAgendaItem(ctx, m.ID, "Вопрос 2", []int{bob.ID, carol.ID})

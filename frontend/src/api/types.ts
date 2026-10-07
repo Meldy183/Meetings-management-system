@@ -13,6 +13,9 @@ export interface PersonCreate {
   info?: string
 }
 
+export type AttendanceMode = 'in_person' | 'vcs'
+export interface MeetingPerson extends Person { attendance_mode: AttendanceMode }
+
 export interface AgendaItem {
   id: number
   text: string
@@ -51,7 +54,7 @@ export interface Meeting {
   chairperson_phrase?: string
   chairperson: Person | null
   agenda_items: AgendaItem[]
-  people: Person[]
+  people: MeetingPerson[]
   status: string
   created_at: string
 }

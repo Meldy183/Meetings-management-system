@@ -33,12 +33,16 @@ func setup(t *testing.T) (*mocks.MockMeetingRepository, *mocks.MockPersonReposit
 }
 
 func meetingWith(people []person.Person, chairperson *person.Person, items []domMeeting.AgendaItem) *domMeeting.Meeting {
+	meetingPeople := make([]domMeeting.MeetingPerson, 0, len(people))
+	for _, p := range people {
+		meetingPeople = append(meetingPeople, domMeeting.MeetingPerson{Person: p, AttendanceMode: domMeeting.AttendanceModeInPerson})
+	}
 	return &domMeeting.Meeting{
 		ID:          testMeetingID,
 		Title:       "Test Meeting",
 		Date:        time.Now(),
 		Chairperson: chairperson,
-		People:      people,
+		People:      meetingPeople,
 		AgendaItems: items,
 	}
 }
@@ -115,10 +119,10 @@ func TestAddPerson_OK(t *testing.T) {
 
 	personRepo.EXPECT().GetByIDs(ctx, []int{bob.ID}).Return([]person.Person{bob}, nil)
 	repo.EXPECT().GetByID(ctx, testMeetingID).Return(m, nil)
-	repo.EXPECT().AddPerson(ctx, testMeetingID, bob.ID).Return(nil)
+	repo.EXPECT().AddPerson(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeInPerson).Return(nil)
 	repo.EXPECT().GetByID(ctx, testMeetingID).Return(updated, nil)
 
-	got, err := svc.AddPerson(ctx, testMeetingID, bob.ID)
+	got, err := svc.AddPerson(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeInPerson)
 	if err != nil || len(got.People) != 2 {
 		t.Errorf("unexpected: %v, %v", got, err)
 	}
@@ -131,7 +135,7 @@ func TestAddPerson_PersonNotExists(t *testing.T) {
 
 	personRepo.EXPECT().GetByIDs(ctx, []int{bob.ID}).Return([]person.Person{}, nil)
 
-	_, err := svc.AddPerson(ctx, testMeetingID, bob.ID)
+	_, err := svc.AddPerson(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeInPerson)
 	var e *svcMeeting.ErrInvalidIDs
 	if !errors.As(err, &e) {
 		t.Errorf("want ErrInvalidIDs, got %v", err)
@@ -146,10 +150,32 @@ func TestAddPerson_AlreadyInMeeting(t *testing.T) {
 	personRepo.EXPECT().GetByIDs(ctx, []int{bob.ID}).Return([]person.Person{bob}, nil)
 	repo.EXPECT().GetByID(ctx, testMeetingID).Return(m, nil)
 
-	_, err := svc.AddPerson(ctx, testMeetingID, bob.ID)
+	_, err := svc.AddPerson(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeInPerson)
 	var e *svcMeeting.ErrPersonAlreadyInMeeting
 	if !errors.As(err, &e) {
 		t.Errorf("want ErrPersonAlreadyInMeeting, got %v", err)
+	}
+}
+
+func TestSetAttendanceMode_OK(t *testing.T) {
+	repo, _, svc := setup(t)
+	ctx := testutil.Ctx()
+	want := meetingWith([]person.Person{bob}, nil, nil)
+	want.People[0].AttendanceMode = domMeeting.AttendanceModeVCS
+	repo.EXPECT().SetAttendanceMode(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeVCS).Return(nil)
+	repo.EXPECT().GetByID(ctx, testMeetingID).Return(want, nil)
+	got, err := svc.SetAttendanceMode(ctx, testMeetingID, bob.ID, domMeeting.AttendanceModeVCS)
+	if err != nil || got.People[0].AttendanceMode != domMeeting.AttendanceModeVCS {
+		t.Fatalf("unexpected result: meeting=%+v err=%v", got, err)
+	}
+}
+
+func TestSetAttendanceMode_RejectsInvalidValue(t *testing.T) {
+	_, _, svc := setup(t)
+	_, err := svc.SetAttendanceMode(testutil.Ctx(), testMeetingID, bob.ID, "remote")
+	var invalid *svcMeeting.ErrInvalidAttendanceMode
+	if !errors.As(err, &invalid) {
+		t.Fatalf("want ErrInvalidAttendanceMode, got %v", err)
 	}
 }
 

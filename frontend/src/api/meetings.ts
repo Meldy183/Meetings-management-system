@@ -1,5 +1,5 @@
 import { apiFetch, BASE_URL } from './client'
-import type { Meeting, MeetingCreate, MeetingList } from './types'
+import type { AttendanceMode, Meeting, MeetingCreate, MeetingList } from './types'
 
 export function getMeetings(limit = 20, offset = 0, status = ''): Promise<MeetingList> {
   const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
@@ -11,8 +11,8 @@ export function createMeeting(data: MeetingCreate): Promise<Meeting> {
   return apiFetch<Meeting>('/meetings', { method: 'POST', body: JSON.stringify(data) })
 }
 
-export function getMeeting(id: string): Promise<Meeting> {
-  return apiFetch<Meeting>(`/meetings/${id}`)
+export function getMeeting(id: string, signal?: AbortSignal): Promise<Meeting> {
+	return apiFetch<Meeting>(`/meetings/${id}`, { signal })
 }
 
 export function updateMeeting(id: string, data: { title: string; date: string; place?: string; title_phrase?: string; chairperson_phrase?: string }): Promise<Meeting> {
@@ -30,11 +30,15 @@ export function deleteMeeting(id: string): Promise<void> {
   return apiFetch<void>(`/meetings/${id}`, { method: 'DELETE' })
 }
 
-export function addMeetingPerson(meetingId: string, personId: number): Promise<Meeting> {
+export function addMeetingPerson(meetingId: string, personId: number, attendance_mode: AttendanceMode = 'in_person'): Promise<Meeting> {
   return apiFetch<Meeting>(`/meetings/${meetingId}/people`, {
     method: 'POST',
-    body: JSON.stringify({ person_id: personId }),
-  })
+		body: JSON.stringify({ person_id: personId, attendance_mode }),
+	})
+}
+
+export function setMeetingPersonAttendanceMode(meetingId: string, personId: number, attendance_mode: AttendanceMode): Promise<Meeting> {
+  return apiFetch<Meeting>(`/meetings/${meetingId}/people/${personId}`, { method: 'PATCH', body: JSON.stringify({ attendance_mode }) })
 }
 
 export function removeMeetingPerson(meetingId: string, personId: number): Promise<Meeting> {

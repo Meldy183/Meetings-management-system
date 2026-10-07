@@ -91,6 +91,7 @@ func main() {
 	protected.HandleFunc("DELETE /meetings/{id}", mh.Delete)
 	protected.HandleFunc("PUT /meetings/{id}/chairperson", mh.SetChairperson)
 	protected.HandleFunc("POST /meetings/{id}/people", mh.AddPerson)
+	protected.HandleFunc("PATCH /meetings/{id}/people/{pid}", mh.SetAttendanceMode)
 	protected.HandleFunc("POST /meetings/{id}/people/sort", mh.SortPeople)
 	protected.HandleFunc("DELETE /meetings/{id}/people/{pid}", mh.RemovePerson)
 	protected.HandleFunc("PUT /meetings/{id}/people/order", mh.ReorderPeople)

@@ -67,8 +67,11 @@ export function ParticipantsPage() {
       setTimeout(() => setImportResult(null), 4000)
     },
     onError: (e) => {
-      const msg = e instanceof ApiError && (e.body as any)?.message
-        ? (e.body as any).message
+      const body = e instanceof ApiError && typeof e.body === 'object' && e.body !== null
+        ? e.body as { message?: unknown }
+        : null
+      const msg = typeof body?.message === 'string'
+        ? body.message
         : 'Ошибка импорта'
       setImportResult(`Ошибка: ${msg}`)
       setTimeout(() => setImportResult(null), 4000)

@@ -3,6 +3,8 @@ package docx
 import (
 	"archive/zip"
 	"bytes"
+	"encoding/xml"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +12,44 @@ import (
 	domMeeting "meetings-editor/internal/domain/meeting"
 	"meetings-editor/internal/domain/person"
 )
+
+func participantTableText(t *testing.T, document string) []string {
+	t.Helper()
+	decoder := xml.NewDecoder(strings.NewReader(document))
+	var tables []string
+	depth := 0
+	var current strings.Builder
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("parse document XML: %v", err)
+		}
+		switch token := token.(type) {
+		case xml.StartElement:
+			if token.Name.Local == "tbl" {
+				depth++
+				if depth == 1 {
+					current.Reset()
+				}
+			}
+		case xml.CharData:
+			if depth > 0 {
+				current.Write(token)
+			}
+		case xml.EndElement:
+			if token.Name.Local == "tbl" && depth > 0 {
+				depth--
+				if depth == 0 {
+					tables = append(tables, current.String())
+				}
+			}
+		}
+	}
+	return tables
+}
 
 var (
 	testPerson1 = person.Person{ID: 1, LastName: "Иванов", FirstName: "Иван", MiddleName: "Иванович", Info: "Директор"}
@@ -22,7 +62,7 @@ func completeMeeting() *domMeeting.Meeting {
 		Title:       "совещание по тестам",
 		Date:        time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
 		Chairperson: &testPerson1,
-		People:      []person.Person{testPerson1, testPerson2},
+		People:      []domMeeting.MeetingPerson{{Person: testPerson1, AttendanceMode: domMeeting.AttendanceModeInPerson}, {Person: testPerson2, AttendanceMode: domMeeting.AttendanceModeVCS}},
 		AgendaItems: []domMeeting.AgendaItem{
 			{ID: 1, Text: "Первый вопрос", Speakers: []person.Person{testPerson2}},
 			{ID: 2, Text: "Второй вопрос", Speakers: []person.Person{testPerson1, testPerson2}},
@@ -81,8 +121,58 @@ func TestAgenda_ContainsMeetingTitle(t *testing.T) {
 	data, _ := g.Agenda(m)
 	files := parseDocx(t, data)
 	doc := files["word/document.xml"]
-	if !strings.Contains(doc, "совещания по тестам") {
+	if !strings.Contains(doc, "совещание по тестам") {
 		t.Error("document.xml should contain meeting title")
+	}
+}
+
+func TestParticipants_GroupsAndNumbersAttendanceModes(t *testing.T) {
+	g := New()
+	m := completeMeeting()
+	third := person.Person{ID: 3, LastName: "Сидоров", FirstName: "Семён"}
+	m.People = append(m.People, domMeeting.MeetingPerson{Person: third, AttendanceMode: domMeeting.AttendanceModeInPerson})
+	data, err := g.Participants(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := parseDocx(t, data)["word/document.xml"]
+	tables := participantTableText(t, document)
+	if len(tables) != 2 {
+		t.Fatalf("want two participant tables, got %d", len(tables))
+	}
+	if strings.Index(document, ">Очно<") > strings.Index(document, ">ВКС<") {
+		t.Fatal("attendance groups are in the wrong order")
+	}
+	if strings.Count(document, `<w:color w:val="0070C0"/>`) != 2 {
+		t.Fatal("only the in-person and VCS headings should use blue text")
+	}
+	if !strings.Contains(document, `<w:spacing w:before="240" w:after="0" w:line="240" w:lineRule="auto"/><w:keepNext/>`) {
+		t.Fatal("attendance group headings should have a larger gap and stay with their table")
+	}
+	if strings.Contains(tables[0], "ИВАНОВ") || !strings.Contains(tables[0], "СИДОРОВ") || !strings.Contains(tables[1], "ПЕТРОВА") {
+		t.Fatalf("participants are assigned to unexpected tables: %#v", tables)
+	}
+	for i, table := range tables {
+		if !strings.Contains(table, "1.") {
+			t.Errorf("table %d should restart numbering at 1", i)
+		}
+	}
+}
+
+func TestParticipants_OmitsEmptyGroupsAndChairperson(t *testing.T) {
+	g := New()
+	m := completeMeeting()
+	m.People = []domMeeting.MeetingPerson{{Person: testPerson1, AttendanceMode: domMeeting.AttendanceModeInPerson}}
+	data, err := g.Participants(m)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := parseDocx(t, data)["word/document.xml"]
+	if tables := participantTableText(t, document); len(tables) != 0 {
+		t.Fatalf("chairperson should not be printed in participant tables: %v", tables)
+	}
+	if strings.Contains(document, ">Очно<") || strings.Contains(document, ">ВКС<") {
+		t.Fatal("empty attendance group headings should be omitted")
 	}
 }
 

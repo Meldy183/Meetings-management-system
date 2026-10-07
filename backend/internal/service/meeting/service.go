@@ -36,6 +36,10 @@ type ErrInvalidIDs struct{ IDs []int }
 
 func (e *ErrInvalidIDs) Error() string { return "one or more person IDs not found" }
 
+type ErrInvalidAttendanceMode struct{}
+
+func (e *ErrInvalidAttendanceMode) Error() string { return "invalid attendance mode" }
+
 type ErrPersonSetMismatch struct{}
 
 func (e *ErrPersonSetMismatch) Error() string {
@@ -108,7 +112,8 @@ type Service interface {
 	SortPeople(ctx context.Context, meetingID string) (*domMeeting.Meeting, error)
 	ReorderPeople(ctx context.Context, meetingID string, personIDs []int) error
 	ReorderAgendaItems(ctx context.Context, meetingID string, agendaItemIDs []int) error
-	AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
+	AddPerson(ctx context.Context, meetingID string, personID int, mode domMeeting.AttendanceMode) (*domMeeting.Meeting, error)
+	SetAttendanceMode(ctx context.Context, meetingID string, personID int, mode domMeeting.AttendanceMode) (*domMeeting.Meeting, error)
 	RemovePerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error)
 	AddAgendaItem(ctx context.Context, meetingID string, text string, speakerIDs []int) (*domMeeting.Meeting, error)
 	UpdateAgendaItem(ctx context.Context, meetingID string, itemID int, text string, speakerIDs []int) (*domMeeting.Meeting, error)
@@ -268,7 +273,10 @@ func (s *service) ReorderAgendaItems(ctx context.Context, meetingID string, agen
 	return s.repo.ReorderAgendaItems(ctx, meetingID, agendaItemIDs)
 }
 
-func (s *service) AddPerson(ctx context.Context, meetingID string, personID int) (*domMeeting.Meeting, error) {
+func (s *service) AddPerson(ctx context.Context, meetingID string, personID int, mode domMeeting.AttendanceMode) (*domMeeting.Meeting, error) {
+	if !mode.Valid() {
+		return nil, &ErrInvalidAttendanceMode{}
+	}
 	people, err := s.personRepo.GetByIDs(ctx, []int{personID})
 	if err != nil {
 		return nil, err
@@ -287,7 +295,17 @@ func (s *service) AddPerson(ctx context.Context, meetingID string, personID int)
 		}
 	}
 
-	if err := s.repo.AddPerson(ctx, meetingID, personID); err != nil {
+	if err := s.repo.AddPerson(ctx, meetingID, personID, mode); err != nil {
+		return nil, err
+	}
+	return s.repo.GetByID(ctx, meetingID)
+}
+
+func (s *service) SetAttendanceMode(ctx context.Context, meetingID string, personID int, mode domMeeting.AttendanceMode) (*domMeeting.Meeting, error) {
+	if !mode.Valid() {
+		return nil, &ErrInvalidAttendanceMode{}
+	}
+	if err := s.repo.SetAttendanceMode(ctx, meetingID, personID, mode); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(ctx, meetingID)

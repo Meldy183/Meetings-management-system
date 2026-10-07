@@ -1,5 +1,9 @@
 # Frontend Implementation Plan
 
+## Attendance mode
+
+`Meeting.people` contains `MeetingPerson` records with `attendance_mode: 'in_person' | 'vcs'`. The creation wizard defaults newly selected people to in-person and saves each mode with the final meeting composition. The meeting detail page updates a participant through `PATCH /meetings/{id}/people/{pid}` and refreshes the meeting after mutations. Speaker assignment refers to the same participant record and does not store a separate mode. The participants DOCX groups people into separate in-person and VCS tables.
+
 ## Stack
 
 | Concern | Choice | Reason |

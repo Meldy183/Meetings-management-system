@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -218,7 +219,12 @@ func (h *MeetingHandler) AddPerson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	m, err := h.svc.AddPerson(r.Context(), id, req.PersonID)
+	mode, err := parseAttendanceMode(req.AttendanceMode, true)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	m, err := h.svc.AddPerson(r.Context(), id, req.PersonID, mode)
 	if err != nil {
 		if errors.Is(err, errs.ErrNotFound) {
 			respondError(w, http.StatusNotFound, "meeting not found", nil)
@@ -232,6 +238,54 @@ func (h *MeetingHandler) AddPerson(w http.ResponseWriter, r *http.Request) {
 		var e2 *svcMeeting.ErrPersonAlreadyInMeeting
 		if errors.As(err, &e2) {
 			respondError(w, http.StatusConflict, e2.Error(), nil)
+			return
+		}
+		respondError(w, http.StatusInternalServerError, "internal error", nil)
+		return
+	}
+	respond(w, http.StatusOK, toMeetingResponse(m))
+}
+
+func parseAttendanceMode(raw json.RawMessage, optional bool) (domMeeting.AttendanceMode, error) {
+	if len(raw) == 0 && optional {
+		return domMeeting.AttendanceModeInPerson, nil
+	}
+	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", errors.New("attendance_mode is required and must be 'in_person' or 'vcs'")
+	}
+	var value string
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", errors.New("attendance_mode must be a string")
+	}
+	mode := domMeeting.AttendanceMode(value)
+	if !mode.Valid() {
+		return "", errors.New("attendance_mode must be 'in_person' or 'vcs'")
+	}
+	return mode, nil
+}
+
+// PATCH /meetings/{id}/people/{pid}
+func (h *MeetingHandler) SetAttendanceMode(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	pid, err := strconv.Atoi(r.PathValue("pid"))
+	if id == "" || err != nil || pid <= 0 {
+		respondError(w, http.StatusBadRequest, "meeting id and positive person id are required", nil)
+		return
+	}
+	var req model.SetAttendanceModeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body", nil)
+		return
+	}
+	mode, err := parseAttendanceMode(req.AttendanceMode, false)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+	m, err := h.svc.SetAttendanceMode(r.Context(), id, pid, mode)
+	if err != nil {
+		if errors.Is(err, errs.ErrNotFound) {
+			respondError(w, http.StatusNotFound, "meeting participant not found", nil)
 			return
 		}
 		respondError(w, http.StatusInternalServerError, "internal error", nil)
@@ -577,9 +631,9 @@ func (h *MeetingHandler) GetPeople(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	people := make([]model.PersonResponse, 0, len(m.People))
+	people := make([]model.MeetingPersonResponse, 0, len(m.People))
 	for _, p := range m.People {
-		people = append(people, toPersonResp(p))
+		people = append(people, model.MeetingPersonResponse{PersonResponse: toPersonResp(p.Person), AttendanceMode: string(p.AttendanceMode)})
 	}
 	respond(w, http.StatusOK, people)
 }
@@ -735,9 +789,9 @@ func toMeetingResponse(m *domMeeting.Meeting) model.MeetingResponse {
 		})
 	}
 
-	people := make([]model.PersonResponse, 0, len(m.People))
+	people := make([]model.MeetingPersonResponse, 0, len(m.People))
 	for _, p := range m.People {
-		people = append(people, toPersonResp(p))
+		people = append(people, model.MeetingPersonResponse{PersonResponse: toPersonResp(p.Person), AttendanceMode: string(p.AttendanceMode)})
 	}
 
 	return model.MeetingResponse{

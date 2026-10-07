@@ -37,7 +37,7 @@ func completeMeetingDomain() *domMeeting.Meeting {
 		Title:       "Test",
 		Date:        time.Now(),
 		Chairperson: &alice,
-		People:      []person.Person{alice, bob},
+		People:      []domMeeting.MeetingPerson{{Person: alice, AttendanceMode: domMeeting.AttendanceModeInPerson}, {Person: bob, AttendanceMode: domMeeting.AttendanceModeInPerson}},
 		AgendaItems: []domMeeting.AgendaItem{
 			{ID: 1, Text: "item", Speakers: []person.Person{bob}},
 		},
@@ -256,7 +256,7 @@ func TestAddPerson_OK(t *testing.T) {
 	svc, export, h := newMeetingHandler(t)
 	_ = export
 
-	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID).Return(completeMeetingDomain(), nil)
+	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID, domMeeting.AttendanceModeInPerson).Return(completeMeetingDomain(), nil)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /meetings/{id}/people", h.AddPerson)
@@ -269,11 +269,53 @@ func TestAddPerson_OK(t *testing.T) {
 	}
 }
 
+func TestAddPerson_VCSMode(t *testing.T) {
+	svc, _, h := newMeetingHandler(t)
+	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID, domMeeting.AttendanceModeVCS).Return(completeMeetingDomain(), nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /meetings/{id}/people", h.AddPerson)
+	w := doRequest(mux, "POST", "/meetings/"+testID+"/people", map[string]any{"person_id": bob.ID, "attendance_mode": "vcs"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestAddPerson_RejectsExplicitNullMode(t *testing.T) {
+	_, _, h := newMeetingHandler(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /meetings/{id}/people", h.AddPerson)
+	w := doRequest(mux, "POST", "/meetings/"+testID+"/people", map[string]any{"person_id": bob.ID, "attendance_mode": nil})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSetAttendanceMode_OK(t *testing.T) {
+	svc, _, h := newMeetingHandler(t)
+	svc.EXPECT().SetAttendanceMode(gomock.Any(), testID, bob.ID, domMeeting.AttendanceModeVCS).Return(completeMeetingDomain(), nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /meetings/{id}/people/{pid}", h.SetAttendanceMode)
+	w := doRequest(mux, "PATCH", "/meetings/"+testID+"/people/2", map[string]string{"attendance_mode": "vcs"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestSetAttendanceMode_InvalidPersonID(t *testing.T) {
+	_, _, h := newMeetingHandler(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("PATCH /meetings/{id}/people/{pid}", h.SetAttendanceMode)
+	w := doRequest(mux, "PATCH", "/meetings/"+testID+"/people/nope", map[string]string{"attendance_mode": "vcs"})
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestAddPerson_AlreadyInMeeting(t *testing.T) {
 	svc, export, h := newMeetingHandler(t)
 	_ = export
 
-	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID).
+	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID, domMeeting.AttendanceModeInPerson).
 		Return(nil, &svcMeeting.ErrPersonAlreadyInMeeting{})
 
 	mux := http.NewServeMux()
@@ -291,7 +333,7 @@ func TestAddPerson_PersonNotExists(t *testing.T) {
 	svc, export, h := newMeetingHandler(t)
 	_ = export
 
-	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID).
+	svc.EXPECT().AddPerson(gomock.Any(), testID, bob.ID, domMeeting.AttendanceModeInPerson).
 		Return(nil, &svcMeeting.ErrInvalidIDs{IDs: []int{bob.ID}})
 
 	mux := http.NewServeMux()
@@ -312,7 +354,7 @@ func TestRemovePerson_OK(t *testing.T) {
 	_ = export
 
 	updated := completeMeetingDomain()
-	updated.People = []person.Person{alice}
+	updated.People = []domMeeting.MeetingPerson{{Person: alice, AttendanceMode: domMeeting.AttendanceModeInPerson}}
 	svc.EXPECT().RemovePerson(gomock.Any(), testID, bob.ID).Return(updated, nil)
 
 	mux := http.NewServeMux()
@@ -814,10 +856,13 @@ func TestGetPeople_OK(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var resp []model.PersonResponse
+	var resp []model.MeetingPersonResponse
 	decodeJSON(t, w, &resp)
 	if len(resp) != 2 {
 		t.Errorf("want 2 people, got %d", len(resp))
+	}
+	if resp[0].AttendanceMode != string(domMeeting.AttendanceModeInPerson) {
+		t.Errorf("want in_person, got %q", resp[0].AttendanceMode)
 	}
 }
 

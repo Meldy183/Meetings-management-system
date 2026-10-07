@@ -36,7 +36,7 @@ const (
 		LIMIT $1 OFFSET $2`
 
 	queryListMeetingPeople = `
-		SELECT mp.meeting_id, p.id, p.last_name, p.first_name, p.middle_name, p.info
+		SELECT mp.meeting_id, p.id, p.last_name, p.first_name, p.middle_name, p.info, mp.attendance_mode
 		FROM meeting_participants mp
 		JOIN participants p ON p.id = mp.person_id
 		WHERE mp.meeting_id = ANY($1)
@@ -69,7 +69,7 @@ const (
 		ORDER BY ais.agenda_item_id, ais.position`
 
 	queryGetMeetingPeople = `
-		SELECT p.id, p.last_name, p.first_name, p.middle_name, p.info
+		SELECT p.id, p.last_name, p.first_name, p.middle_name, p.info, mp.attendance_mode
 		FROM meeting_participants mp
 		JOIN participants p ON p.id = mp.person_id
 		WHERE mp.meeting_id = $1
@@ -94,9 +94,11 @@ const (
 	queryDeleteMeeting = `DELETE FROM meetings WHERE id = $1`
 
 	queryAddMeetingPerson = `
-		INSERT INTO meeting_participants (meeting_id, person_id, position)
+		INSERT INTO meeting_participants (meeting_id, person_id, position, attendance_mode)
 		VALUES ($1, $2,
-		  (SELECT COALESCE(MAX(position), -1) + 1 FROM meeting_participants WHERE meeting_id = $1))`
+		  (SELECT COALESCE(MAX(position), -1) + 1 FROM meeting_participants WHERE meeting_id = $1), $3)`
+
+	queryUpdateAttendanceMode = `UPDATE meeting_participants SET attendance_mode = $3 WHERE meeting_id = $1 AND person_id = $2`
 
 	queryRemoveMeetingPerson = `
 		DELETE FROM meeting_participants WHERE meeting_id = $1 AND person_id = $2`
@@ -126,7 +128,6 @@ const (
 	queryUpdateAgendaItem = `
 		UPDATE agenda_items SET text = $3
 		WHERE id = $1 AND meeting_id = $2`
-
 
 	queryDeleteAgendaItem = `
 		DELETE FROM agenda_items WHERE id = $1 AND meeting_id = $2`
@@ -226,8 +227,8 @@ func (r *repository) GetAll(ctx context.Context, limit, offset int, status strin
 	defer pRows.Close()
 	for pRows.Next() {
 		var mid string
-		var p person.Person
-		if err := pRows.Scan(&mid, &p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
+		var p meeting.MeetingPerson
+		if err := pRows.Scan(&mid, &p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info, &p.AttendanceMode); err != nil {
 			return nil, 0, err
 		}
 		i := idxByID[mid]
@@ -329,8 +330,8 @@ func (r *repository) GetByID(ctx context.Context, id string) (*meeting.Meeting, 
 	}
 	defer pRows.Close()
 	for pRows.Next() {
-		var p person.Person
-		if err := pRows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info); err != nil {
+		var p meeting.MeetingPerson
+		if err := pRows.Scan(&p.ID, &p.LastName, &p.FirstName, &p.MiddleName, &p.Info, &p.AttendanceMode); err != nil {
 			return nil, err
 		}
 		m.People = append(m.People, p)
@@ -415,9 +416,20 @@ func (r *repository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-func (r *repository) AddPerson(ctx context.Context, meetingID string, personID int) error {
-	_, err := r.db.Exec(ctx, queryAddMeetingPerson, meetingID, personID)
+func (r *repository) AddPerson(ctx context.Context, meetingID string, personID int, mode meeting.AttendanceMode) error {
+	_, err := r.db.Exec(ctx, queryAddMeetingPerson, meetingID, personID, mode)
 	return err
+}
+
+func (r *repository) SetAttendanceMode(ctx context.Context, meetingID string, personID int, mode meeting.AttendanceMode) error {
+	tag, err := r.db.Exec(ctx, queryUpdateAttendanceMode, meetingID, personID, mode)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return errs.ErrNotFound
+	}
+	return nil
 }
 
 func (r *repository) RemovePerson(ctx context.Context, meetingID string, personID int) error {

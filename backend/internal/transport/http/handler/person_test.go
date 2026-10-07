@@ -167,7 +167,7 @@ func TestPersonCreate_MissingFields(t *testing.T) {
 	}
 }
 
-func TestPersonCreate_Conflict(t *testing.T) {
+func TestPersonCreate_ServiceError(t *testing.T) {
 	svc, h := newPersonHandler(t)
 
 	svc.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil, errs.ErrConflict)
@@ -178,8 +178,8 @@ func TestPersonCreate_Conflict(t *testing.T) {
 		"last_name": "Дубль", "first_name": "Один",
 	})
 
-	if w.Code != http.StatusConflict {
-		t.Errorf("want 409, got %d", w.Code)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 for an unclassified service error, got %d", w.Code)
 	}
 }
 

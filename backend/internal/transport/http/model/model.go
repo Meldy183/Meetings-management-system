@@ -1,6 +1,9 @@
 package model
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Request models
 
@@ -33,18 +36,23 @@ type AgendaItemResponse struct {
 	Speakers []PersonResponse `json:"speakers"`
 }
 
+type MeetingPersonResponse struct {
+	PersonResponse
+	AttendanceMode string `json:"attendance_mode"`
+}
+
 type MeetingResponse struct {
-	ID                string               `json:"id"`
-	Title             string               `json:"title"`
-	Date              time.Time            `json:"date"`
-	Place             string               `json:"place,omitempty"`
-	TitlePhrase       string               `json:"title_phrase,omitempty"`
-	ChairpersonPhrase string               `json:"chairperson_phrase,omitempty"`
-	Chairperson       *PersonResponse      `json:"chairperson"`
-	AgendaItems       []AgendaItemResponse `json:"agenda_items"`
-	People            []PersonResponse     `json:"people"`
-	Status            string               `json:"status"`
-	CreatedAt         time.Time            `json:"created_at"`
+	ID                string                  `json:"id"`
+	Title             string                  `json:"title"`
+	Date              time.Time               `json:"date"`
+	Place             string                  `json:"place,omitempty"`
+	TitlePhrase       string                  `json:"title_phrase,omitempty"`
+	ChairpersonPhrase string                  `json:"chairperson_phrase,omitempty"`
+	Chairperson       *PersonResponse         `json:"chairperson"`
+	AgendaItems       []AgendaItemResponse    `json:"agenda_items"`
+	People            []MeetingPersonResponse `json:"people"`
+	Status            string                  `json:"status"`
+	CreatedAt         time.Time               `json:"created_at"`
 }
 
 type MeetingSummaryResponse struct {
@@ -85,7 +93,12 @@ type SetChairpersonRequest struct {
 }
 
 type AddMeetingPersonRequest struct {
-	PersonID int `json:"person_id"`
+	PersonID       int             `json:"person_id"`
+	AttendanceMode json.RawMessage `json:"attendance_mode"`
+}
+
+type SetAttendanceModeRequest struct {
+	AttendanceMode json.RawMessage `json:"attendance_mode"`
 }
 
 type AgendaItemUpsertRequest struct {
