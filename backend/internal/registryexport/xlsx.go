@@ -13,12 +13,12 @@ import (
 	"meetings-editor/internal/domain/person"
 )
 
-const sheetName = "Реестр"
+const sheetName = "Лист1"
 
-var headers = []string{"Фамилия", "Имя", "Отчество", "Информация", "ID"}
+var headers = []string{"Фамилия", "Имя", "Отчество", "Должность"}
 
 // WriteXLSX creates a new file. Existing files are never overwritten.
-// The first four columns match the application's Excel import format.
+// The columns and layout match examples/participants_example.xlsx.
 func WriteXLSX(people []person.Person, path string) (err error) {
 	if !strings.EqualFold(filepath.Ext(path), ".xlsx") {
 		return errors.New("output file must have the .xlsx extension")
@@ -49,9 +49,6 @@ func WriteXLSX(people []person.Person, path string) (err error) {
 				return err
 			}
 		}
-		if err := f.SetCellInt(sheetName, fmt.Sprintf("E%d", i+2), int64(p.ID)); err != nil {
-			return err
-		}
 	}
 	if err := formatWorkbook(f, len(people)+1); err != nil {
 		return err
@@ -74,40 +71,19 @@ func WriteXLSX(people []person.Person, path string) (err error) {
 }
 
 func formatWorkbook(f *excelize.File, lastRow int) error {
-	bodyStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Family: "Calibri", Size: 11},
-		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
-	})
-	if err != nil {
-		return err
-	}
-	if err := f.SetCellStyle(sheetName, "A1", fmt.Sprintf("E%d", lastRow), bodyStyle); err != nil {
-		return err
-	}
-	headerStyle, err := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Family: "Calibri", Size: 11, Bold: true, Color: "FFFFFF"},
-		Fill:      excelize.Fill{Type: "pattern", Pattern: 1, Color: []string{"1F4E78"}},
-		Alignment: &excelize.Alignment{Vertical: "center"},
-	})
-	if err != nil {
-		return err
-	}
-	if err := f.SetCellStyle(sheetName, "A1", "E1", headerStyle); err != nil {
-		return err
-	}
-	if err := f.SetRowHeight(sheetName, 1, 24); err != nil {
-		return err
+	// The example uses default Calibri 11, plain cells and 15-point rows.
+	for row := 1; row <= lastRow; row++ {
+		if err := f.SetRowHeight(sheetName, row, 15); err != nil {
+			return err
+		}
 	}
 	for _, col := range []struct {
 		name  string
 		width float64
-	}{{"A", 26}, {"B", 22}, {"C", 26}, {"D", 72}, {"E", 12}} {
+	}{{"A", 14.19}, {"B", 13.07}, {"C", 15.3}, {"D", 48.41}} {
 		if err := f.SetColWidth(sheetName, col.name, col.name, col.width); err != nil {
 			return err
 		}
 	}
-	if err := f.SetPanes(sheetName, &excelize.Panes{Freeze: true, YSplit: 1, TopLeftCell: "A2", ActivePane: "bottomLeft"}); err != nil {
-		return err
-	}
-	return f.AutoFilter(sheetName, fmt.Sprintf("A1:E%d", lastRow), nil)
+	return nil
 }

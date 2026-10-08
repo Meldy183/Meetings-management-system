@@ -1,6 +1,8 @@
 package registryexport
 
 import (
+	"archive/zip"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,10 +37,10 @@ func TestWriteXLSXPreservesAllRecordsAndLiteralText(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := [][]string{
-		{"Фамилия", "Имя", "Отчество", "Информация", "ID"},
-		{"Маркин", "Федор", "Сергеевич", "Студент\nВторой курс", "7"},
-		{"Маркин", "Федор", "Сергеевич", "=SUM(1,2)", "9"},
-		{"  Иванова  ", "Анна", "", "+literal @text", "11"},
+		{"Фамилия", "Имя", "Отчество", "Должность"},
+		{"Маркин", "Федор", "Сергеевич", "Студент\nВторой курс"},
+		{"Маркин", "Федор", "Сергеевич", "=SUM(1,2)"},
+		{"  Иванова  ", "Анна", "", "+literal @text"},
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("registry data changed: got %#v, want %#v", rows, want)
@@ -47,6 +49,133 @@ func TestWriteXLSXPreservesAllRecordsAndLiteralText(t *testing.T) {
 	if err != nil || formula != "" {
 		t.Fatalf("formula-like data must remain text: formula=%q, error=%v", formula, err)
 	}
+}
+
+func TestWriteXLSXMatchesExampleLayout(t *testing.T) {
+	// Keep a copy of the example in testdata so this test also runs in Docker.
+	examplePath := filepath.Join("testdata", "participants_example.xlsx")
+	example, err := excelize.OpenFile(examplePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer example.Close()
+	exampleSheet := example.GetSheetName(0)
+	exampleRows, err := example.GetRows(exampleSheet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var people []person.Person
+	for i, row := range exampleRows[1:] {
+		people = append(people, person.Person{ID: i + 1, LastName: row[0], FirstName: row[1], MiddleName: row[2], Info: row[3]})
+	}
+	path := filepath.Join(t.TempDir(), "participants.xlsx")
+	if err := WriteXLSX(people, path); err != nil {
+		t.Fatal(err)
+	}
+	f, err := excelize.OpenFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if got := f.GetSheetList(); !reflect.DeepEqual(got, example.GetSheetList()) {
+		t.Fatalf("sheet should match the example, got %v", got)
+	}
+	rows, err := f.GetRows(sheetName)
+	if err != nil || !reflect.DeepEqual(rows, exampleRows) {
+		t.Fatalf("export should match the example's four-column format: rows=%v, error=%v", rows, err)
+	}
+	for _, col := range []string{"A", "B", "C", "D"} {
+		want, err := example.GetColWidth(exampleSheet, col)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := f.GetColWidth(sheetName, col)
+		if err != nil || got != want {
+			t.Errorf("column %s width=%v, want %v, error=%v", col, got, want, err)
+		}
+	}
+	for row := 1; row <= len(exampleRows); row++ {
+		want, err := example.GetRowHeight(exampleSheet, row)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := f.GetRowHeight(sheetName, row)
+		if err != nil || got != want {
+			t.Errorf("row %d height=%v, want %v, error=%v", row, got, want, err)
+		}
+	}
+	exampleStyleID, err := example.GetCellStyle(exampleSheet, "A1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	exampleStyle, err := example.GetStyle(exampleStyleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	styleID, err := f.GetCellStyle(sheetName, "A1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	style, err := f.GetStyle(styleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	font, err := f.GetDefaultFont()
+	if err != nil {
+		t.Fatal(err)
+	}
+	exampleFont, err := example.GetDefaultFont()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if font != exampleFont {
+		t.Fatalf("default font should match the example: got %q, want %q", font, exampleFont)
+	}
+	// The example inherits its normal font; Excelize may return nil for it.
+	bold := style.Font != nil && style.Font.Bold
+	exampleBold := exampleStyle.Font != nil && exampleStyle.Font.Bold
+	if bold != exampleBold {
+		t.Fatal("header font weight should match the example")
+	}
+	if style.Fill.Pattern != exampleStyle.Fill.Pattern || !reflect.DeepEqual(style.Fill.Color, exampleStyle.Fill.Color) {
+		t.Fatalf("header fill should match the plain example: %#v", style.Fill)
+	}
+	wrap := style.Alignment != nil && style.Alignment.WrapText
+	exampleWrap := exampleStyle.Alignment != nil && exampleStyle.Alignment.WrapText
+	if wrap != exampleWrap {
+		t.Fatal("text wrapping should match the example")
+	}
+	for _, element := range []string{"autoFilter", "pane"} {
+		if sheetContainsElement(t, path, element) != sheetContainsElement(t, examplePath, element) {
+			t.Errorf("worksheet element %s should match the example", element)
+		}
+	}
+}
+
+func sheetContainsElement(t *testing.T, path, name string) bool {
+	t.Helper()
+	z, err := zip.OpenReader(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer z.Close()
+	for _, entry := range z.File {
+		if entry.Name != "xl/worksheets/sheet1.xml" {
+			continue
+		}
+		r, err := entry.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		document, err := io.ReadAll(r)
+		r.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.Contains(string(document), "<"+name)
+	}
+	t.Fatal("worksheet XML not found")
+	return false
 }
 
 func TestWriteXLSXEmptyRegistry(t *testing.T) {
