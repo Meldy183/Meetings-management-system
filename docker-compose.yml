@@ -95,6 +95,20 @@ services:
     stdin_open: true
     tty: true
 
+  # Read-only registry export: never starts DB, backend or migrations.
+  export-participants:
+    profiles: [export]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: export-participants
+    environment:
+      DATABASE_URL: ${EXPORT_DATABASE_URL:-postgres://meetings:meetings@db:5432/meetings_editor?sslmode=disable}
+    user: "${EXPORT_UID:-1000}:${EXPORT_GID:-1000}"
+    working_dir: /exports
+    volumes:
+      - ./outputs:/exports
+
   # 5. React frontend (nginx)
   frontend:
     build:

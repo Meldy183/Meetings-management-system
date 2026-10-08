@@ -20,6 +20,22 @@ COPY . .
 
 CMD ["sh", "-c", "go test -p 1 ./... 2>&1 | grep -v '^?'"]
 
+# ---- standalone registry exporter (no server or migrations) ----
+FROM golang:1.24-alpine AS export-builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -o export-participants ./cmd/export-participants
+
+FROM alpine:3.20 AS export-participants
+
+RUN apk add --no-cache ca-certificates
+WORKDIR /app
+COPY --from=export-builder /app/export-participants .
+ENTRYPOINT ["/app/export-participants"]
+
 # ---- runtime ----
 FROM alpine:3.20
 
